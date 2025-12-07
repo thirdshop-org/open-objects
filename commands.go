@@ -199,6 +199,44 @@ func cmdTemplates() error {
 	return nil
 }
 
+func cmdImport(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("import", flag.ExitOnError)
+	filePath := fs.String("file", "", "Chemin vers le fichier CSV ou JSON")
+	typeName := fs.String("type", "", "Type par défaut pour les pièces (optionnel)")
+	dryRun := fs.Bool("dry-run", false, "Simuler l'import sans écrire en base")
+	stopOnErr := fs.Bool("stop-on-error", false, "Arrêter au premier erreur")
+	verbose := fs.Bool("verbose", false, "Afficher chaque pièce importée")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *filePath == "" {
+		return fmt.Errorf("le fichier est requis (--file=stock.csv)")
+	}
+
+	opts := ImportOptions{
+		FilePath:  *filePath,
+		TypeName:  *typeName,
+		DryRun:    *dryRun,
+		StopOnErr: *stopOnErr,
+		Verbose:   *verbose,
+	}
+
+	fmt.Printf("📦 Import depuis: %s\n", *filePath)
+	if *typeName != "" {
+		fmt.Printf("   Type par défaut: %s\n", *typeName)
+	}
+
+	stats, err := ImportFromFile(db, opts)
+	if err != nil {
+		return err
+	}
+
+	PrintImportStats(stats, *dryRun)
+	return nil
+}
+
 // --- Helpers d'affichage ---
 
 func printPartsTable(rows *sql.Rows, countLabel string) error {

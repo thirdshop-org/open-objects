@@ -14,6 +14,7 @@ Usage:
 
 Commandes:
   add        Ajouter une pièce au stock
+  import     Importer des pièces depuis un fichier CSV ou JSON
   list       Lister toutes les pièces
   search     Rechercher des pièces
   templates  Afficher les types de pièces disponibles
@@ -21,6 +22,8 @@ Commandes:
 Exemples:
   recycle add --type=moteur --name="Moteur Essuie-Glace" --props='{"volts":12, "watts":50}'
   recycle add --type=roulement --name="SKF 6204" --props='{"d_int":20, "d_ext":47, "largeur":14}'
+  recycle import --file=stock.csv --type=roulement
+  recycle import --file=pieces.json --verbose
   recycle list
   recycle search --type=roulement
   recycle search --type=roulement --prop="d_int:10..25"
@@ -51,6 +54,10 @@ func main() {
 	case "add":
 		if err := cmdAdd(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur add: %v", err)
+		}
+	case "import":
+		if err := cmdImport(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur import: %v", err)
 		}
 	case "list":
 		if err := cmdList(db); err != nil {

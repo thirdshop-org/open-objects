@@ -1,0 +1,13 @@
+[
+  {"type": "moteur", "name": "Moteur essuie-glace Bosch", "volts": 12, "watts": 50, "rpm": 45, "marque": "Bosch"},
+  {"type": "moteur", "name": "Moteur lève-vitre Valeo", "volts": 12, "watts": 30, "rpm": 80, "marque": "Valeo"},
+  {"type": "moteur", "name": "Moteur ventilateur 775", "volts": 12, "watts": 150, "rpm": 12000, "axe": 5, "marque": "Generic"},
+  {"type": "moteur", "name": "Moteur 550 récup imprimante", "volts": 12, "watts": 25, "rpm": 6000, "axe": 3.17, "marque": "Mabuchi"},
+  {"type": "moteur", "name": "Moteur brushless 2212", "volts": 11.1, "watts": 180, "rpm": 920, "type": "brushless", "marque": "EMAX"},
+  {"type": "moteur", "name": "Stepper NEMA17", "volts": 12, "watts": 8, "axe": 5, "type": "stepper", "marque": "Generic"},
+  {"type": "moteur", "name": "Moteur 130 jouet", "volts": 3, "watts": 1, "rpm": 8000, "axe": 2, "marque": "Generic"},
+  {"type": "moteur", "name": "Moteur 280 récup DVD", "volts": 5, "watts": 2, "rpm": 3500, "axe": 2, "marque": "Mabuchi"},
+  {"type": "moteur", "name": "Moteur pompe lave-glace", "volts": 12, "watts": 20, "rpm": 2500, "marque": "Valeo"},
+  {"type": "moteur", "name": "Moteur ventilo PC 12V", "volts": 12, "watts": 3, "rpm": 1500, "type": "brushless", "marque": "Delta"}
+]
+

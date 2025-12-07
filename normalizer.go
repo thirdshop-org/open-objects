@@ -314,12 +314,39 @@ func GetDefaultUnitForField(fieldName string) string {
 	return "" // Pas d'unité par défaut
 }
 
+// textOnlyFields liste les champs qui sont toujours du texte libre (jamais des valeurs avec unités)
+var textOnlyFields = map[string]bool{
+	"reference": true,
+	"marque":    true,
+	"type":      true,
+	"tete":      true,
+	"materiau":  true,
+	"modele":    true,
+	"serie":     true,
+	"nom":       true,
+	"name":      true,
+	"couleur":   true,
+	"notes":     true,
+	"commentaire": true,
+}
+
+// isTextOnlyField vérifie si un champ est toujours du texte
+func isTextOnlyField(fieldName string) bool {
+	return textOnlyFields[strings.ToLower(fieldName)]
+}
+
 // NormalizeProps normalise toutes les propriétés numériques d'un map
 // Les valeurs peuvent être des nombres, des chaînes avec unités, ou du texte libre
 func NormalizeProps(props map[string]interface{}, fieldUnits map[string]string) (map[string]interface{}, error) {
 	normalized := make(map[string]interface{})
 
 	for key, value := range props {
+		// Champs texte: ne pas essayer de normaliser
+		if isTextOnlyField(key) {
+			normalized[key] = value
+			continue
+		}
+
 		// Déterminer l'unité par défaut pour ce champ
 		defaultUnit := ""
 		if fieldUnits != nil {
