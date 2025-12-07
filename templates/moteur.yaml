@@ -1,11 +1,35 @@
 name: moteur
 description: Moteur électrique
-required:
-  - volts    # Tension nominale
-  - watts    # Puissance
-optional:
-  - rpm      # Tours par minute
-  - axe      # Diamètre de l'axe (mm)
-  - type     # DC, AC, brushless
-  - marque
 
+fields:
+  volts:
+    description: Tension nominale
+    required: true
+    domain: tension
+    default_unit: V
+  
+  watts:
+    description: Puissance
+    required: true
+    domain: puissance
+    default_unit: W
+  
+  rpm:
+    description: Tours par minute
+    required: false
+    domain: vitesse_rot
+    default_unit: rpm
+  
+  axe:
+    description: Diamètre de l'axe
+    required: false
+    domain: dimension
+    default_unit: mm
+  
+  type:
+    description: Type de moteur (DC, AC, brushless)
+    required: false
+  
+  marque:
+    description: Marque du fabricant
+    required: false

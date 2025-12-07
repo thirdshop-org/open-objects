@@ -1,10 +1,29 @@
 name: vis
 description: Vis et boulons
-required:
-  - diametre  # Diamètre nominal (M3, M4, etc.)
-  - longueur  # Longueur en mm
-optional:
-  - pas       # Pas de filetage
-  - tete      # hex, torx, cruciforme, allen
-  - materiau  # inox, acier, laiton
 
+fields:
+  diametre:
+    description: Diamètre nominal (M3, M4, etc. ou valeur en mm)
+    required: true
+    domain: dimension
+    default_unit: mm
+  
+  longueur:
+    description: Longueur
+    required: true
+    domain: dimension
+    default_unit: mm
+  
+  pas:
+    description: Pas de filetage
+    required: false
+    domain: dimension
+    default_unit: mm
+  
+  tete:
+    description: Type de tête (hex, torx, cruciforme, allen)
+    required: false
+  
+  materiau:
+    description: Matériau (inox, acier, laiton)
+    required: false

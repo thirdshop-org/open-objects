@@ -1,11 +1,33 @@
 name: roulement
 description: Roulement à billes ou rouleaux
-required:
-  - d_int    # Diamètre intérieur (mm)
-  - d_ext    # Diamètre extérieur (mm)
-  - largeur  # Largeur (mm)
-optional:
-  - type     # billes, rouleaux, aiguilles
-  - marque
-  - reference
 
+fields:
+  d_int:
+    description: Diamètre intérieur
+    required: true
+    domain: dimension
+    default_unit: mm
+  
+  d_ext:
+    description: Diamètre extérieur
+    required: true
+    domain: dimension
+    default_unit: mm
+  
+  largeur:
+    description: Largeur
+    required: true
+    domain: dimension
+    default_unit: mm
+  
+  type:
+    description: Type de roulement (billes, rouleaux, aiguilles)
+    required: false
+  
+  marque:
+    description: Marque du fabricant
+    required: false
+  
+  reference:
+    description: Référence fabricant
+    required: false

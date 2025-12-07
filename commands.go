@@ -22,7 +22,7 @@ func cmdAdd(db *sql.DB, args []string) error {
 		return fmt.Errorf("le nom est requis (--name)")
 	}
 
-	// Parser et valider les props
+	// Parser les props
 	var propsMap map[string]interface{}
 	if err := json.Unmarshal([]byte(*props), &propsMap); err != nil {
 		return fmt.Errorf("props invalide: %v", err)
@@ -35,7 +35,20 @@ func cmdAdd(db *sql.DB, args []string) error {
 		}
 	}
 
-	result, err := db.Exec("INSERT INTO parts (type, name, props) VALUES (?, ?, ?)", *typeName, *name, *props)
+	// Normaliser les unités
+	fieldUnits := GetFieldUnits(*typeName)
+	normalizedProps, err := NormalizeProps(propsMap, fieldUnits)
+	if err != nil {
+		return fmt.Errorf("erreur de normalisation: %v", err)
+	}
+
+	// Sérialiser les props normalisées
+	normalizedJSON, err := json.Marshal(normalizedProps)
+	if err != nil {
+		return fmt.Errorf("erreur sérialisation: %v", err)
+	}
+
+	result, err := db.Exec("INSERT INTO parts (type, name, props) VALUES (?, ?, ?)", *typeName, *name, string(normalizedJSON))
 	if err != nil {
 		return err
 	}
@@ -46,7 +59,14 @@ func cmdAdd(db *sql.DB, args []string) error {
 		fmt.Printf("  Type: %s\n", *typeName)
 	}
 	fmt.Printf("  Nom: %s\n", *name)
-	fmt.Printf("  Props: %s\n", *props)
+	
+	// Afficher les props normalisées avec indication des conversions
+	if *props != string(normalizedJSON) {
+		fmt.Printf("  Props (normalisées): %s\n", string(normalizedJSON))
+		fmt.Printf("  Props (originales):  %s\n", *props)
+	} else {
+		fmt.Printf("  Props: %s\n", *props)
+	}
 
 	return nil
 }

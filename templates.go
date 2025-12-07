@@ -11,12 +11,23 @@ import (
 
 const templatesDir = "templates"
 
+// FieldDef définit les métadonnées d'un champ
+type FieldDef struct {
+	Description string `yaml:"description"`
+	Required    bool   `yaml:"required"`
+	Domain      string `yaml:"domain"`       // dimension, tension, courant, etc.
+	DefaultUnit string `yaml:"default_unit"` // mm, V, A, etc.
+}
+
 // Template représente un archétype de pièce
 type Template struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Required    []string `yaml:"required"`
-	Optional    []string `yaml:"optional"`
+	Name        string              `yaml:"name"`
+	Description string              `yaml:"description"`
+	Fields      map[string]FieldDef `yaml:"fields"`
+
+	// Champs calculés pour rétrocompatibilité
+	Required []string `yaml:"-"`
+	Optional []string `yaml:"-"`
 }
 
 // Templates stocke tous les templates chargés
@@ -47,6 +58,15 @@ func LoadTemplates() error {
 			return fmt.Errorf("erreur parsing %s: %v", entry.Name(), err)
 		}
 
+		// Construire les listes Required et Optional à partir de Fields
+		for fieldName, fieldDef := range tmpl.Fields {
+			if fieldDef.Required {
+				tmpl.Required = append(tmpl.Required, fieldName)
+			} else {
+				tmpl.Optional = append(tmpl.Optional, fieldName)
+			}
+		}
+
 		Templates[tmpl.Name] = &tmpl
 	}
 
@@ -69,3 +89,53 @@ func ValidateProps(typeName string, props map[string]interface{}) error {
 	return nil
 }
 
+// GetFieldUnits retourne un map des unités par défaut pour chaque champ d'un template
+func GetFieldUnits(typeName string) map[string]string {
+	tmpl, exists := Templates[typeName]
+	if !exists {
+		return nil
+	}
+
+	units := make(map[string]string)
+	for fieldName, fieldDef := range tmpl.Fields {
+		if fieldDef.DefaultUnit != "" {
+			units[fieldName] = fieldDef.DefaultUnit
+		}
+	}
+
+	return units
+}
+
+// GetFieldDomain retourne le domaine d'un champ pour un template donné
+func GetFieldDomain(typeName, fieldName string) UnitDomain {
+	tmpl, exists := Templates[typeName]
+	if !exists {
+		return DomainNone
+	}
+
+	fieldDef, exists := tmpl.Fields[fieldName]
+	if !exists {
+		return DomainNone
+	}
+
+	switch fieldDef.Domain {
+	case "dimension":
+		return DomainDimension
+	case "tension":
+		return DomainTension
+	case "courant":
+		return DomainCourant
+	case "resistance":
+		return DomainResistance
+	case "capacite":
+		return DomainCapacite
+	case "pression":
+		return DomainPression
+	case "vitesse_rot":
+		return DomainVitesseRot
+	case "puissance":
+		return DomainPuissance
+	default:
+		return DomainNone
+	}
+}
