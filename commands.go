@@ -79,13 +79,13 @@ func cmdSearch(db *sql.DB, args []string) error {
 			CASE 
 				WHEN $type IS NOT NULL AND $type != '' 
 				THEN type = $type 
-				ELSE TRUE 
+				ELSE FALSE 
 			END
-			AND
+			OR
 			CASE 
 				WHEN $name IS NOT NULL AND $name != '' 
 				THEN name LIKE '%' || $name || '%'
-				ELSE TRUE
+				ELSE FALSE
 			END
 	`
 	rows, err := db.Query(query, sql.Named("type", *typeName), sql.Named("name", *nameSearch))
@@ -188,4 +188,3 @@ func truncate(s string, max int) string {
 	}
 	return s
 }
-
