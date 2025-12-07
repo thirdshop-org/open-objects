@@ -39,6 +39,16 @@ func runMigrations(db *sql.DB) error {
 		return err
 	}
 
+	// Migration v4: Table des localisations (arborescence)
+	if err := migrateV4(db); err != nil {
+		return err
+	}
+
+	// Migration v5: Ajout location_id sur parts
+	if err := migrateV5(db); err != nil {
+		return err
+	}
+
 	// Index
 	if err := createIndexes(db); err != nil {
 		return err
@@ -86,11 +96,39 @@ func migrateV3(db *sql.DB) error {
 	return err
 }
 
+// migrateV4 crée la table des localisations (arborescence de conteneurs)
+func migrateV4(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS locations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			parent_id INTEGER,
+			loc_type TEXT DEFAULT 'BOX',
+			description TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (parent_id) REFERENCES locations(id) ON DELETE SET NULL
+		)
+	`)
+	return err
+}
+
+// migrateV5 ajoute la colonne location_id sur parts
+func migrateV5(db *sql.DB) error {
+	if hasColumn(db, "parts", "location_id") {
+		return nil
+	}
+
+	_, err := db.Exec("ALTER TABLE parts ADD COLUMN location_id INTEGER REFERENCES locations(id)")
+	return err
+}
+
 func createIndexes(db *sql.DB) error {
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_parts_name ON parts (name)",
 		"CREATE INDEX IF NOT EXISTS idx_parts_type ON parts (type)",
+		"CREATE INDEX IF NOT EXISTS idx_parts_location ON parts (location_id)",
 		"CREATE INDEX IF NOT EXISTS idx_attachments_part_id ON attachments (part_id)",
+		"CREATE INDEX IF NOT EXISTS idx_locations_parent ON locations (parent_id)",
 	}
 
 	for _, idx := range indexes {

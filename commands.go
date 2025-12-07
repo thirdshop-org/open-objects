@@ -13,6 +13,7 @@ func cmdAdd(db *sql.DB, args []string) error {
 	typeName := fs.String("type", "", "Type de pièce (ex: roulement, moteur)")
 	name := fs.String("name", "", "Nom de la pièce")
 	props := fs.String("props", "{}", "Propriétés JSON de la pièce")
+	locName := fs.String("loc", "", "Localisation (nom ou ID)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -48,7 +49,32 @@ func cmdAdd(db *sql.DB, args []string) error {
 		return fmt.Errorf("erreur sérialisation: %v", err)
 	}
 
-	result, err := db.Exec("INSERT INTO parts (type, name, props) VALUES (?, ?, ?)", *typeName, *name, string(normalizedJSON))
+	// Trouver la localisation si spécifiée
+	var locationID *int
+	if *locName != "" {
+		var loc *Location
+		var id int
+		if _, err := fmt.Sscanf(*locName, "%d", &id); err == nil {
+			loc, _ = FindLocationByID(db, id)
+		}
+		if loc == nil {
+			loc, err = FindLocationByName(db, *locName)
+			if err != nil {
+				return fmt.Errorf("localisation: %v", err)
+			}
+		}
+		locationID = &loc.ID
+	}
+
+	// Insérer avec ou sans localisation
+	var result sql.Result
+	if locationID != nil {
+		result, err = db.Exec("INSERT INTO parts (type, name, props, location_id) VALUES (?, ?, ?, ?)", 
+			*typeName, *name, string(normalizedJSON), *locationID)
+	} else {
+		result, err = db.Exec("INSERT INTO parts (type, name, props) VALUES (?, ?, ?)", 
+			*typeName, *name, string(normalizedJSON))
+	}
 	if err != nil {
 		return err
 	}
@@ -68,11 +94,17 @@ func cmdAdd(db *sql.DB, args []string) error {
 		fmt.Printf("  Props: %s\n", *props)
 	}
 
+	// Afficher la localisation
+	if locationID != nil {
+		path, _ := GetFullPath(db, *locationID)
+		fmt.Printf("  📍 Localisation: %s\n", path)
+	}
+
 	return nil
 }
 
 func cmdList(db *sql.DB) error {
-	rows, err := db.Query("SELECT id, type, name, props FROM parts ORDER BY id")
+	rows, err := db.Query("SELECT id, type, name, props, location_id FROM parts ORDER BY id")
 	if err != nil {
 		return err
 	}
@@ -155,7 +187,7 @@ func cmdSearch(db *sql.DB, args []string) error {
 			   )
 		)
 		
-		SELECT id, type, name, props 
+		SELECT id, type, name, props, location_id 
 		FROM filtered_by_prop
 		ORDER BY id
 	`
@@ -327,27 +359,244 @@ func cmdFiles(db *sql.DB, args []string) error {
 	return nil
 }
 
+func cmdLoc(db *sql.DB, args []string) error {
+	if len(args) == 0 {
+		// Sans argument, afficher l'arborescence
+		return PrintLocationTree(db)
+	}
+
+	subCmd := args[0]
+
+	switch subCmd {
+	case "add":
+		return cmdLocAdd(db, args[1:])
+	case "list", "ls":
+		return PrintLocationTree(db)
+	case "move", "mv":
+		return cmdLocMove(db, args[1:])
+	case "delete", "rm":
+		return cmdLocDelete(db, args[1:])
+	case "set":
+		return cmdLocSet(db, args[1:])
+	default:
+		// Si ce n'est pas une sous-commande, c'est peut-être le nom pour "add"
+		return cmdLocAdd(db, args)
+	}
+}
+
+func cmdLocAdd(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("loc add", flag.ExitOnError)
+	parentName := fs.String("in", "", "Nom ou ID de la localisation parente")
+	locType := fs.String("type", "BOX", "Type: ZONE, FURNITURE, SHELF, BOX")
+	description := fs.String("desc", "", "Description optionnelle")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if fs.NArg() == 0 {
+		return fmt.Errorf("nom de la localisation requis\nUsage: recycle loc add \"Nom\" [--in=parent] [--type=TYPE]")
+	}
+
+	name := fs.Arg(0)
+
+	// Trouver le parent si spécifié
+	var parentID *int
+	if *parentName != "" {
+		// Essayer d'abord comme ID
+		var id int
+		if _, err := fmt.Sscanf(*parentName, "%d", &id); err == nil {
+			loc, err := FindLocationByID(db, id)
+			if err != nil {
+				return fmt.Errorf("parent: %v", err)
+			}
+			parentID = &loc.ID
+		} else {
+			// Chercher par nom
+			loc, err := FindLocationByName(db, *parentName)
+			if err != nil {
+				return err
+			}
+			parentID = &loc.ID
+		}
+	}
+
+	loc, err := CreateLocation(db, name, parentID, *locType, *description)
+	if err != nil {
+		return err
+	}
+
+	icon := GetLocationIcon(loc.LocType)
+	fmt.Printf("✓ Localisation créée [ID: %d]\n", loc.ID)
+	fmt.Printf("  %s %s (%s)\n", icon, loc.Name, loc.LocType)
+
+	if parentID != nil {
+		path, _ := GetFullPath(db, loc.ID)
+		fmt.Printf("  📍 Chemin: %s\n", path)
+	}
+
+	return nil
+}
+
+func cmdLocMove(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("loc move", flag.ExitOnError)
+	targetName := fs.String("to", "", "Nouveau parent (nom ou ID, vide = racine)")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if fs.NArg() == 0 {
+		return fmt.Errorf("ID ou nom de la localisation à déplacer requis\nUsage: recycle loc move <loc> --to=<nouveau_parent>")
+	}
+
+	// Trouver la localisation à déplacer
+	locArg := fs.Arg(0)
+	var loc *Location
+	var id int
+	if _, err := fmt.Sscanf(locArg, "%d", &id); err == nil {
+		loc, _ = FindLocationByID(db, id)
+	}
+	if loc == nil {
+		var err error
+		loc, err = FindLocationByName(db, locArg)
+		if err != nil {
+			return fmt.Errorf("localisation '%s' introuvable", locArg)
+		}
+	}
+
+	oldPath, _ := GetFullPath(db, loc.ID)
+
+	// Trouver le nouveau parent
+	var newParentID *int
+	if *targetName != "" {
+		var parentID int
+		if _, err := fmt.Sscanf(*targetName, "%d", &parentID); err == nil {
+			newParentID = &parentID
+		} else {
+			parent, err := FindLocationByName(db, *targetName)
+			if err != nil {
+				return fmt.Errorf("nouveau parent: %v", err)
+			}
+			newParentID = &parent.ID
+		}
+	}
+
+	if err := MoveLocation(db, loc.ID, newParentID); err != nil {
+		return err
+	}
+
+	newPath, _ := GetFullPath(db, loc.ID)
+
+	fmt.Printf("✓ Localisation déplacée\n")
+	fmt.Printf("  Avant: %s\n", oldPath)
+	fmt.Printf("  Après: %s\n", newPath)
+
+	return nil
+}
+
+func cmdLocDelete(db *sql.DB, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("ID ou nom de la localisation à supprimer requis")
+	}
+
+	locArg := args[0]
+	var loc *Location
+	var id int
+	if _, err := fmt.Sscanf(locArg, "%d", &id); err == nil {
+		loc, _ = FindLocationByID(db, id)
+	}
+	if loc == nil {
+		var err error
+		loc, err = FindLocationByName(db, locArg)
+		if err != nil {
+			return fmt.Errorf("localisation '%s' introuvable", locArg)
+		}
+	}
+
+	path, _ := GetFullPath(db, loc.ID)
+
+	if err := DeleteLocation(db, loc.ID); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ Localisation supprimée: %s\n", path)
+	return nil
+}
+
+func cmdLocSet(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("loc set", flag.ExitOnError)
+	partID := fs.Int("part", 0, "ID de la pièce")
+	locName := fs.String("loc", "", "Nom ou ID de la localisation")
+	clear := fs.Bool("clear", false, "Supprimer la localisation de la pièce")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *partID == 0 {
+		return fmt.Errorf("ID de la pièce requis (--part)")
+	}
+
+	if *clear {
+		if err := ClearPartLocation(db, *partID); err != nil {
+			return err
+		}
+		fmt.Printf("✓ Localisation supprimée pour la pièce ID %d\n", *partID)
+		return nil
+	}
+
+	if *locName == "" {
+		return fmt.Errorf("localisation requise (--loc) ou utilisez --clear")
+	}
+
+	// Trouver la localisation
+	var loc *Location
+	var id int
+	if _, err := fmt.Sscanf(*locName, "%d", &id); err == nil {
+		loc, _ = FindLocationByID(db, id)
+	}
+	if loc == nil {
+		var err error
+		loc, err = FindLocationByName(db, *locName)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := SetPartLocation(db, *partID, loc.ID); err != nil {
+		return err
+	}
+
+	path, _ := GetFullPath(db, loc.ID)
+	fmt.Printf("✓ Pièce ID %d localisée dans: %s\n", *partID, path)
+	return nil
+}
+
 // --- Helpers d'affichage ---
 
 // PartRow représente une ligne de pièce pour l'affichage
 type PartRow struct {
-	ID       int
-	TypeName string
-	Name     string
-	Props    string
+	ID         int
+	TypeName   string
+	Name       string
+	Props      string
+	LocationID sql.NullInt64
 }
 
 func printPartsTableWithAttachments(db *sql.DB, rows *sql.Rows, countLabel string) error {
 	// Collecter toutes les lignes d'abord
 	var parts []PartRow
 	var partIDs []int
+	var locationIDs []int
 
 	for rows.Next() {
 		var id int
 		var typeName, name string
 		var propsRaw sql.NullString
+		var locationID sql.NullInt64
 
-		if err := rows.Scan(&id, &typeName, &name, &propsRaw); err != nil {
+		if err := rows.Scan(&id, &typeName, &name, &propsRaw, &locationID); err != nil {
 			return err
 		}
 
@@ -356,12 +605,16 @@ func printPartsTableWithAttachments(db *sql.DB, rows *sql.Rows, countLabel strin
 			propsStr = propsRaw.String
 		}
 
-		parts = append(parts, PartRow{id, typeName, name, propsStr})
+		parts = append(parts, PartRow{id, typeName, name, propsStr, locationID})
 		partIDs = append(partIDs, id)
+		if locationID.Valid {
+			locationIDs = append(locationIDs, int(locationID.Int64))
+		}
 	}
 
-	// Récupérer les attachments pour toutes les pièces
+	// Récupérer les attachments et localisations
 	attachmentsMap, _ := GetAttachmentsForParts(db, partIDs)
+	locationsMap, _ := GetLocationsMap(db, locationIDs)
 
 	// Afficher le tableau
 	fmt.Println("┌─────┬──────────────┬────────────────────────────┬────────────────────────────────────────┬───────┐")
@@ -387,14 +640,29 @@ func printPartsTableWithAttachments(db *sql.DB, rows *sql.Rows, countLabel strin
 	fmt.Println("└─────┴──────────────┴────────────────────────────┴────────────────────────────────────────┴───────┘")
 	fmt.Printf("\n%s: %d pièce(s)\n", countLabel, len(parts))
 
-	// Afficher les pièces avec documentation
+	// Collecter pièces avec docs et pièces avec localisation
 	var partsWithDocs []PartRow
+	var partsWithLoc []PartRow
 	for _, p := range parts {
 		if attachments, ok := attachmentsMap[p.ID]; ok && len(attachments) > 0 {
 			partsWithDocs = append(partsWithDocs, p)
 		}
+		if p.LocationID.Valid {
+			partsWithLoc = append(partsWithLoc, p)
+		}
 	}
 
+	// Afficher les localisations
+	if len(partsWithLoc) > 0 {
+		fmt.Println("\n📍 Localisations:")
+		for _, p := range partsWithLoc {
+			if path, ok := locationsMap[int(p.LocationID.Int64)]; ok {
+				fmt.Printf("  [%d] %s: %s\n", p.ID, p.Name, path)
+			}
+		}
+	}
+
+	// Afficher les pièces avec documentation
 	if len(partsWithDocs) > 0 {
 		fmt.Println("\n📎 Documentation disponible:")
 		for _, p := range partsWithDocs {

@@ -18,17 +18,27 @@ Commandes:
   files      Lister les fichiers attachés
   import     Importer des pièces depuis un fichier CSV ou JSON
   list       Lister toutes les pièces
+  loc        Gérer les localisations (arborescence atelier)
   search     Rechercher des pièces
   templates  Afficher les types de pièces disponibles
 
 Exemples:
-  recycle add --type=moteur --name="Moteur Essuie-Glace" --props='{"volts":12, "watts":50}'
-  recycle attach --id=12 --file=./datasheet.pdf
-  recycle files --id=12
-  recycle import --file=stock.csv --type=roulement
-  recycle list
+  # Gestion des pièces
+  recycle add --type=moteur --name="Moteur 12V" --props='{"volts":12, "watts":50}' --loc="Boite Moteurs"
   recycle search --type=roulement --prop="d_int:10..25"
-  recycle templates`)
+  recycle import --file=stock.csv --type=roulement
+  
+  # Gestion des localisations
+  recycle loc                                           # Afficher l'arborescence
+  recycle loc add "Atelier Vélo" --type=ZONE            # Créer une zone racine
+  recycle loc add "Etabli Rouge" --in="Atelier Vélo" --type=FURNITURE
+  recycle loc add "Boite Roulements" --in="Etabli Rouge" --type=BOX
+  recycle loc move "Boite Roulements" --to="Armoire A"  # Déplacer
+  recycle loc set --part=42 --loc="Boite Roulements"    # Localiser une pièce
+  
+  # Documentation
+  recycle attach --id=12 --file=./datasheet.pdf
+  recycle files --id=12`)
 }
 
 func main() {
@@ -70,6 +80,10 @@ func main() {
 	case "list":
 		if err := cmdList(db); err != nil {
 			log.Fatalf("Erreur list: %v", err)
+		}
+	case "loc", "location", "locations":
+		if err := cmdLoc(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur loc: %v", err)
 		}
 	case "search":
 		if err := cmdSearch(db, os.Args[2:]); err != nil {
