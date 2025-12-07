@@ -1,0 +1,10 @@
+name: vis
+description: Vis et boulons
+required:
+  - diametre  # Diamètre nominal (M3, M4, etc.)
+  - longueur  # Longueur en mm
+optional:
+  - pas       # Pas de filetage
+  - tete      # hex, torx, cruciforme, allen
+  - materiau  # inox, acier, laiton
+

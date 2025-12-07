@@ -1,0 +1,11 @@
+name: moteur
+description: Moteur électrique
+required:
+  - volts    # Tension nominale
+  - watts    # Puissance
+optional:
+  - rpm      # Tours par minute
+  - axe      # Diamètre de l'axe (mm)
+  - type     # DC, AC, brushless
+  - marque
+

@@ -1,0 +1,11 @@
+name: roulement
+description: Roulement à billes ou rouleaux
+required:
+  - d_int    # Diamètre intérieur (mm)
+  - d_ext    # Diamètre extérieur (mm)
+  - largeur  # Largeur (mm)
+optional:
+  - type     # billes, rouleaux, aiguilles
+  - marque
+  - reference
+
