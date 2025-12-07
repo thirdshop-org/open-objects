@@ -14,6 +14,8 @@ Usage:
 
 Commandes:
   add        Ajouter une pièce au stock
+  attach     Attacher un fichier (PDF, photo) à une pièce
+  files      Lister les fichiers attachés
   import     Importer des pièces depuis un fichier CSV ou JSON
   list       Lister toutes les pièces
   search     Rechercher des pièces
@@ -21,13 +23,11 @@ Commandes:
 
 Exemples:
   recycle add --type=moteur --name="Moteur Essuie-Glace" --props='{"volts":12, "watts":50}'
-  recycle add --type=roulement --name="SKF 6204" --props='{"d_int":20, "d_ext":47, "largeur":14}'
+  recycle attach --id=12 --file=./datasheet.pdf
+  recycle files --id=12
   recycle import --file=stock.csv --type=roulement
-  recycle import --file=pieces.json --verbose
   recycle list
-  recycle search --type=roulement
   recycle search --type=roulement --prop="d_int:10..25"
-  recycle search --name="SKF"
   recycle templates`)
 }
 
@@ -54,6 +54,14 @@ func main() {
 	case "add":
 		if err := cmdAdd(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur add: %v", err)
+		}
+	case "attach":
+		if err := cmdAttach(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur attach: %v", err)
+		}
+	case "files":
+		if err := cmdFiles(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur files: %v", err)
 		}
 	case "import":
 		if err := cmdImport(db, os.Args[2:]); err != nil {

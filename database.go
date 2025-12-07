@@ -34,6 +34,11 @@ func runMigrations(db *sql.DB) error {
 		return err
 	}
 
+	// Migration v3: Table des fichiers attachés
+	if err := migrateV3(db); err != nil {
+		return err
+	}
+
 	// Index
 	if err := createIndexes(db); err != nil {
 		return err
@@ -64,10 +69,28 @@ func migrateV2(db *sql.DB) error {
 	return err
 }
 
+// migrateV3 crée la table des fichiers attachés
+func migrateV3(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS attachments (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			part_id INTEGER NOT NULL,
+			filename TEXT NOT NULL,
+			filepath TEXT NOT NULL,
+			filetype TEXT DEFAULT '',
+			filesize INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (part_id) REFERENCES parts(id) ON DELETE CASCADE
+		)
+	`)
+	return err
+}
+
 func createIndexes(db *sql.DB) error {
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_parts_name ON parts (name)",
 		"CREATE INDEX IF NOT EXISTS idx_parts_type ON parts (type)",
+		"CREATE INDEX IF NOT EXISTS idx_attachments_part_id ON attachments (part_id)",
 	}
 
 	for _, idx := range indexes {

@@ -59,7 +59,7 @@ func cmdAdd(db *sql.DB, args []string) error {
 		fmt.Printf("  Type: %s\n", *typeName)
 	}
 	fmt.Printf("  Nom: %s\n", *name)
-	
+
 	// Afficher les props normalisées avec indication des conversions
 	if *props != string(normalizedJSON) {
 		fmt.Printf("  Props (normalisées): %s\n", string(normalizedJSON))
@@ -78,7 +78,7 @@ func cmdList(db *sql.DB) error {
 	}
 	defer rows.Close()
 
-	return printPartsTable(rows, "Total")
+	return printPartsTableWithAttachments(db, rows, "Total")
 }
 
 func cmdSearch(db *sql.DB, args []string) error {
@@ -174,7 +174,7 @@ func cmdSearch(db *sql.DB, args []string) error {
 	}
 	defer rows.Close()
 
-	return printPartsTable(rows, "Résultats")
+	return printPartsTableWithAttachments(db, rows, "Résultats")
 }
 
 func cmdTemplates() error {
@@ -237,13 +237,110 @@ func cmdImport(db *sql.DB, args []string) error {
 	return nil
 }
 
+func cmdAttach(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("attach", flag.ExitOnError)
+	partID := fs.Int("id", 0, "ID de la pièce")
+	filePath := fs.String("file", "", "Chemin vers le fichier à attacher")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *partID == 0 {
+		return fmt.Errorf("l'ID de la pièce est requis (--id)")
+	}
+	if *filePath == "" {
+		return fmt.Errorf("le fichier est requis (--file)")
+	}
+
+	attachment, err := AttachFile(db, *partID, *filePath)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ Fichier attaché avec succès\n")
+	fmt.Printf("  Pièce ID: %d\n", attachment.PartID)
+	fmt.Printf("  Fichier:  %s\n", attachment.Filename)
+	fmt.Printf("  Stocké:   %s\n", attachment.Filepath)
+	fmt.Printf("  Taille:   %s\n", formatFileSize(attachment.Filesize))
+
+	return nil
+}
+
+func cmdFiles(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("files", flag.ExitOnError)
+	partID := fs.Int("id", 0, "ID de la pièce (optionnel, liste tous si non spécifié)")
+	deleteID := fs.Int("delete", 0, "ID de l'attachement à supprimer")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Suppression d'un attachement
+	if *deleteID > 0 {
+		if err := DeleteAttachment(db, *deleteID); err != nil {
+			return err
+		}
+		fmt.Printf("✓ Attachement ID %d supprimé\n", *deleteID)
+		return nil
+	}
+
+	// Lister les fichiers d'une pièce spécifique
+	if *partID > 0 {
+		return ListPartAttachments(db, *partID)
+	}
+
+	// Lister toutes les pièces avec des fichiers attachés
+	rows, err := db.Query(`
+		SELECT DISTINCT p.id, p.type, p.name, 
+			   (SELECT COUNT(*) FROM attachments WHERE part_id = p.id) as attach_count
+		FROM parts p
+		INNER JOIN attachments a ON a.part_id = p.id
+		ORDER BY p.id
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	fmt.Println("\n📎 Pièces avec fichiers attachés:")
+	fmt.Println(strings.Repeat("─", 60))
+
+	count := 0
+	for rows.Next() {
+		var id int
+		var typeName, name string
+		var attachCount int
+		if err := rows.Scan(&id, &typeName, &name, &attachCount); err != nil {
+			return err
+		}
+
+		fmt.Printf("  [%d] %s - %s (%d fichier(s))\n", id, typeName, name, attachCount)
+		count++
+	}
+
+	if count == 0 {
+		fmt.Println("  Aucune pièce avec fichiers attachés")
+	}
+	fmt.Println()
+
+	return nil
+}
+
 // --- Helpers d'affichage ---
 
-func printPartsTable(rows *sql.Rows, countLabel string) error {
-	count := 0
-	fmt.Println("┌─────┬──────────────┬────────────────────────────┬────────────────────────────────────────┐")
-	fmt.Println("│ ID  │ Type         │ Nom                        │ Propriétés                             │")
-	fmt.Println("├─────┼──────────────┼────────────────────────────┼────────────────────────────────────────┤")
+// PartRow représente une ligne de pièce pour l'affichage
+type PartRow struct {
+	ID       int
+	TypeName string
+	Name     string
+	Props    string
+}
+
+func printPartsTableWithAttachments(db *sql.DB, rows *sql.Rows, countLabel string) error {
+	// Collecter toutes les lignes d'abord
+	var parts []PartRow
+	var partIDs []int
 
 	for rows.Next() {
 		var id int
@@ -259,17 +356,55 @@ func printPartsTable(rows *sql.Rows, countLabel string) error {
 			propsStr = propsRaw.String
 		}
 
-		// Tronquer si trop long
-		displayType := truncate(typeName, 12)
-		displayName := truncate(name, 26)
-		displayProps := truncate(propsStr, 38)
-
-		fmt.Printf("│ %-3d │ %-12s │ %-26s │ %-38s │\n", id, displayType, displayName, displayProps)
-		count++
+		parts = append(parts, PartRow{id, typeName, name, propsStr})
+		partIDs = append(partIDs, id)
 	}
 
-	fmt.Println("└─────┴──────────────┴────────────────────────────┴────────────────────────────────────────┘")
-	fmt.Printf("\n%s: %d pièce(s)\n", countLabel, count)
+	// Récupérer les attachments pour toutes les pièces
+	attachmentsMap, _ := GetAttachmentsForParts(db, partIDs)
+
+	// Afficher le tableau
+	fmt.Println("┌─────┬──────────────┬────────────────────────────┬────────────────────────────────────────┬───────┐")
+	fmt.Println("│ ID  │ Type         │ Nom                        │ Propriétés                             │ Docs  │")
+	fmt.Println("├─────┼──────────────┼────────────────────────────┼────────────────────────────────────────┼───────┤")
+
+	for _, p := range parts {
+		displayType := truncate(p.TypeName, 12)
+		displayName := truncate(p.Name, 26)
+		displayProps := truncate(p.Props, 38)
+
+		// Indicateur de fichiers attachés
+		docsIndicator := ""
+		if attachments, ok := attachmentsMap[p.ID]; ok && len(attachments) > 0 {
+			docsIndicator = FormatAttachmentsSummary(attachments)
+		}
+		docsDisplay := truncate(docsIndicator, 5)
+
+		fmt.Printf("│ %-3d │ %-12s │ %-26s │ %-38s │ %-5s │\n",
+			p.ID, displayType, displayName, displayProps, docsDisplay)
+	}
+
+	fmt.Println("└─────┴──────────────┴────────────────────────────┴────────────────────────────────────────┴───────┘")
+	fmt.Printf("\n%s: %d pièce(s)\n", countLabel, len(parts))
+
+	// Afficher les pièces avec documentation
+	var partsWithDocs []PartRow
+	for _, p := range parts {
+		if attachments, ok := attachmentsMap[p.ID]; ok && len(attachments) > 0 {
+			partsWithDocs = append(partsWithDocs, p)
+		}
+	}
+
+	if len(partsWithDocs) > 0 {
+		fmt.Println("\n📎 Documentation disponible:")
+		for _, p := range partsWithDocs {
+			attachments := attachmentsMap[p.ID]
+			fmt.Printf("  [%d] %s:\n", p.ID, p.Name)
+			for _, a := range attachments {
+				fmt.Printf("       → %s\n", a.Filepath)
+			}
+		}
+	}
 
 	return nil
 }
