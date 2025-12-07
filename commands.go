@@ -71,39 +71,90 @@ func cmdSearch(db *sql.DB, args []string) error {
 		return err
 	}
 
-	// Construire la requête
+	// Parser le critère de propriété si présent
+	var propName, propExact string
+	var propMin, propMax float64
+	var isRange bool
+
+	if *propSearch != "" {
+		criteria, err := ParseSearchProp(*propSearch)
+		if err != nil {
+			return err
+		}
+		propName = criteria.PropName
+		isRange = criteria.IsRange
+		propExact = criteria.ExactVal
+		propMin = criteria.MinVal
+		propMax = criteria.MaxVal
+	}
+
+	// Requête unique avec CTEs pour lisibilité
 	query := `
+		WITH 
+		-- Paramètres de recherche
+		params AS (
+			SELECT 
+				$type      AS filter_type,
+				$name      AS filter_name,
+				$prop_name AS prop_name,
+				$prop_exact AS prop_exact,
+				$prop_min  AS prop_min,
+				$prop_max  AS prop_max,
+				$is_range  AS is_range
+		),
+		
+		-- Filtre par type
+		filtered_by_type AS (
+			SELECT p.* 
+			FROM parts p, params
+			WHERE params.filter_type = '' 
+			   OR p.type = params.filter_type
+		),
+		
+		-- Filtre par nom
+		filtered_by_name AS (
+			SELECT f.* 
+			FROM filtered_by_type f, params
+			WHERE params.filter_name = '' 
+			   OR f.name LIKE '%' || params.filter_name || '%'
+		),
+		
+		-- Filtre par propriété JSON
+		filtered_by_prop AS (
+			SELECT f.* 
+			FROM filtered_by_name f, params
+			WHERE params.prop_name = ''
+			   OR (
+			       CASE 
+			           WHEN params.is_range THEN
+			               CAST(json_extract(f.props, '$.' || params.prop_name) AS REAL) 
+			               BETWEEN params.prop_min AND params.prop_max
+			           ELSE
+			               CAST(json_extract(f.props, '$.' || params.prop_name) AS TEXT) = params.prop_exact
+			       END
+			   )
+		)
+		
 		SELECT id, type, name, props 
-		FROM parts 
-		WHERE 
-			CASE 
-				WHEN $type IS NOT NULL AND $type != '' 
-				THEN type = $type 
-				ELSE FALSE 
-			END
-			OR
-			CASE 
-				WHEN $name IS NOT NULL AND $name != '' 
-				THEN name LIKE '%' || $name || '%'
-				ELSE FALSE
-			END
+		FROM filtered_by_prop
+		ORDER BY id
 	`
-	rows, err := db.Query(query, sql.Named("type", *typeName), sql.Named("name", *nameSearch))
+
+	rows, err := db.Query(query,
+		sql.Named("type", *typeName),
+		sql.Named("name", *nameSearch),
+		sql.Named("prop_name", propName),
+		sql.Named("prop_exact", propExact),
+		sql.Named("prop_min", propMin),
+		sql.Named("prop_max", propMax),
+		sql.Named("is_range", isRange),
+	)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	// Parser le critère de recherche par propriété
-	var criteria *SearchCriteria
-	if *propSearch != "" {
-		criteria, err = ParseSearchProp(*propSearch)
-		if err != nil {
-			return err
-		}
-	}
-
-	return printPartsTableFiltered(rows, criteria, "Résultats")
+	return printPartsTable(rows, "Résultats")
 }
 
 func cmdTemplates() error {
@@ -131,10 +182,6 @@ func cmdTemplates() error {
 // --- Helpers d'affichage ---
 
 func printPartsTable(rows *sql.Rows, countLabel string) error {
-	return printPartsTableFiltered(rows, nil, countLabel)
-}
-
-func printPartsTableFiltered(rows *sql.Rows, criteria *SearchCriteria, countLabel string) error {
 	count := 0
 	fmt.Println("┌─────┬──────────────┬────────────────────────────┬────────────────────────────────────────┐")
 	fmt.Println("│ ID  │ Type         │ Nom                        │ Propriétés                             │")
@@ -152,19 +199,6 @@ func printPartsTableFiltered(rows *sql.Rows, criteria *SearchCriteria, countLabe
 		propsStr := "{}"
 		if propsRaw.Valid {
 			propsStr = propsRaw.String
-		}
-
-		// Filtrage par propriété si critère spécifié
-		if criteria != nil {
-			var propsMap map[string]interface{}
-			if err := json.Unmarshal([]byte(propsStr), &propsMap); err != nil {
-				continue
-			}
-
-			propVal, exists := propsMap[criteria.PropName]
-			if !exists || !criteria.MatchesCriteria(propVal) {
-				continue
-			}
 		}
 
 		// Tronquer si trop long
