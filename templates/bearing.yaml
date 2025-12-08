@@ -1,0 +1,31 @@
+name: bearing
+description: Roulement standard (ISO)
+
+fields:
+  d_int:
+    description: Diamètre intérieur (mm)
+    required: true
+    domain: dimension
+    default_unit: mm
+
+  d_ext:
+    description: Diamètre extérieur (mm)
+    required: true
+    domain: dimension
+    default_unit: mm
+
+  width:
+    description: Largeur (mm)
+    required: true
+    domain: dimension
+    default_unit: mm
+
+  type:
+    description: Type de roulement (deep groove, angular, etc.)
+    required: false
+
+  brand:
+    description: Marque
+    required: false
+
+

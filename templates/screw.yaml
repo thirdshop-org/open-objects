@@ -1,0 +1,35 @@
+name: screw
+description: Vis métrique standard
+
+fields:
+  head:
+    description: Type de tête (hex, torx, philips, etc.)
+    required: true
+
+  length:
+    description: Longueur
+    required: true
+    domain: dimension
+    default_unit: mm
+
+  diameter:
+    description: Diamètre (M4, M5 ou valeur en mm)
+    required: true
+    domain: dimension
+    default_unit: mm
+
+  pitch:
+    description: Pas (mm)
+    required: true
+    domain: dimension
+    default_unit: mm
+
+  material:
+    description: Matériau
+    required: false
+
+  finish:
+    description: Finition (zingué, inox, brut)
+    required: false
+
+

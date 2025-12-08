@@ -25,6 +25,11 @@ func cmdAdd(db *sql.DB, args []string) error {
 		return fmt.Errorf("le nom est requis (--name)")
 	}
 
+	// Refuser les types inconnus (taxonomie standard)
+	if *typeName != "" && !TypeExists(*typeName) {
+		return fmt.Errorf("type '%s' inconnu. Utilisez un template existant (commande 'templates')", *typeName)
+	}
+
 	// Parser les props
 	var propsMap map[string]interface{}
 	if err := json.Unmarshal([]byte(*props), &propsMap); err != nil {

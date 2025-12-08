@@ -10,6 +10,7 @@ import (
 )
 
 const templatesDir = "templates"
+const strictTypes = true // refuser la création de catégories inconnues
 
 // FieldDef définit les métadonnées d'un champ
 type FieldDef struct {
@@ -73,11 +74,20 @@ func LoadTemplates() error {
 	return nil
 }
 
-// ValidateProps vérifie que les propriétés respectent le template
+// TypeExists indique si un type est connu (présent dans les templates)
+func TypeExists(typeName string) bool {
+	_, exists := Templates[typeName]
+	return exists
+}
+
+// ValidateProps vérifie que les propriétés respectent le template et que le type est connu
 func ValidateProps(typeName string, props map[string]interface{}) error {
 	tmpl, exists := Templates[typeName]
 	if !exists {
-		return nil // Type libre, pas de validation
+		if strictTypes {
+			return fmt.Errorf("type inconnu: %s (ajoutez un template ou désactivez le mode strict)", typeName)
+		}
+		return nil // Type libre si le mode strict est désactivé
 	}
 
 	for _, req := range tmpl.Required {

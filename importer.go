@@ -121,6 +121,17 @@ func importCSV(db *sql.DB, opts ImportOptions) (*ImportStats, error) {
 			}
 		}
 
+		// Vérifier que le type est connu
+		if typeName != "" && !TypeExists(typeName) {
+			stats.Errors++
+			msg := fmt.Sprintf("ligne %d: type '%s' inconnu (utilisez un template existant)", lineNum, typeName)
+			stats.ErrorMsgs = append(stats.ErrorMsgs, msg)
+			if opts.StopOnErr {
+				return stats, fmt.Errorf(msg)
+			}
+			continue
+		}
+
 		// Extraire le nom
 		if nameIdx >= len(record) {
 			stats.Errors++
@@ -258,6 +269,17 @@ func importJSON(db *sql.DB, opts ImportOptions) (*ImportStats, error) {
 			typeName = t
 		}
 		delete(record, "type")
+
+		// Vérifier que le type est connu
+		if typeName != "" && !TypeExists(typeName) {
+			stats.Errors++
+			msg := fmt.Sprintf("enregistrement %d: type '%s' inconnu (utilisez un template existant)", lineNum, typeName)
+			stats.ErrorMsgs = append(stats.ErrorMsgs, msg)
+			if opts.StopOnErr {
+				return stats, fmt.Errorf(msg)
+			}
+			continue
+		}
 
 		// Extraire le nom
 		name := ""
