@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
+	"time"
 )
 
 func cmdAdd(db *sql.DB, args []string) error {
@@ -69,10 +71,10 @@ func cmdAdd(db *sql.DB, args []string) error {
 	// Insérer avec ou sans localisation
 	var result sql.Result
 	if locationID != nil {
-		result, err = db.Exec("INSERT INTO parts (type, name, props, location_id) VALUES (?, ?, ?, ?)", 
+		result, err = db.Exec("INSERT INTO parts (type, name, props, location_id) VALUES (?, ?, ?, ?)",
 			*typeName, *name, string(normalizedJSON), *locationID)
 	} else {
-		result, err = db.Exec("INSERT INTO parts (type, name, props) VALUES (?, ?, ?)", 
+		result, err = db.Exec("INSERT INTO parts (type, name, props) VALUES (?, ?, ?)",
 			*typeName, *name, string(normalizedJSON))
 	}
 	if err != nil {
@@ -356,6 +358,79 @@ func cmdFiles(db *sql.DB, args []string) error {
 	}
 	fmt.Println()
 
+	return nil
+}
+
+func cmdDump(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("dump", flag.ExitOnError)
+	outputFile := fs.String("file", "", "Fichier de sortie (défaut: backup_YYYYMMDD_HHMMSS.json)")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Générer un nom de fichier par défaut si non spécifié
+	filename := *outputFile
+	if filename == "" {
+		now := time.Now().Format("20060102_150405")
+		filename = fmt.Sprintf("backup_%s.json", now)
+	}
+
+	// Vérifier que le fichier n'existe pas déjà
+	if _, err := os.Stat(filename); err == nil {
+		return fmt.Errorf("le fichier %s existe déjà. Utilisez --file pour spécifier un autre nom", filename)
+	}
+
+	if err := CreateBackup(db, filename); err != nil {
+		return err
+	}
+
+	fmt.Printf("\n💾 Sauvegarde disponible: %s\n", filename)
+	return nil
+}
+
+func cmdRestore(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("restore", flag.ExitOnError)
+	inputFile := fs.String("file", "", "Fichier de sauvegarde à restaurer")
+	force := fs.Bool("force", false, "Ne pas demander confirmation pour écraser les données")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *inputFile == "" {
+		return fmt.Errorf("fichier de sauvegarde requis (--file)")
+	}
+
+	// Valider le fichier de backup
+	backup, err := ValidateBackupFile(*inputFile)
+	if err != nil {
+		return fmt.Errorf("fichier de sauvegarde invalide: %v", err)
+	}
+
+	fmt.Printf("🔄 Restauration depuis: %s\n", *inputFile)
+	fmt.Printf("📊 Sauvegarde: v%s (%s)\n", backup.Version, backup.GeneratedAt[:19])
+	fmt.Printf("  📍 Localisations: %d\n", len(backup.Locations))
+	fmt.Printf("  🔧 Pièces: %d\n", len(backup.Parts))
+	fmt.Printf("  📎 Fichiers: %d\n", len(backup.Attachments))
+
+	// Demander confirmation si pas --force
+	if !*force {
+		fmt.Print("\n⚠️  ATTENTION: Cela va ÉCRASER toutes les données actuelles!\n")
+		fmt.Print("Tapez 'yes' pour continuer: ")
+		var response string
+		fmt.Scanln(&response)
+		if response != "yes" {
+			fmt.Println("Restauration annulée.")
+			return nil
+		}
+	}
+
+	if err := RestoreFromBackup(db, *inputFile); err != nil {
+		return err
+	}
+
+	fmt.Printf("\n✅ Restauration terminée. Redémarrez si nécessaire.\n")
 	return nil
 }
 

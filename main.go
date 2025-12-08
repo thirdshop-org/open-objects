@@ -15,10 +15,12 @@ Usage:
 Commandes:
   add        Ajouter une pièce au stock
   attach     Attacher un fichier (PDF, photo) à une pièce
+  dump       Créer une sauvegarde complète (JSON)
   files      Lister les fichiers attachés
   import     Importer des pièces depuis un fichier CSV ou JSON
   list       Lister toutes les pièces
   loc        Gérer les localisations (arborescence atelier)
+  restore    Restaurer depuis une sauvegarde JSON
   search     Rechercher des pièces
   templates  Afficher les types de pièces disponibles
 
@@ -27,7 +29,7 @@ Exemples:
   recycle add --type=moteur --name="Moteur 12V" --props='{"volts":12, "watts":50}' --loc="Boite Moteurs"
   recycle search --type=roulement --prop="d_int:10..25"
   recycle import --file=stock.csv --type=roulement
-  
+
   # Gestion des localisations
   recycle loc                                           # Afficher l'arborescence
   recycle loc add "Atelier Vélo" --type=ZONE            # Créer une zone racine
@@ -35,7 +37,13 @@ Exemples:
   recycle loc add "Boite Roulements" --in="Etabli Rouge" --type=BOX
   recycle loc move "Boite Roulements" --to="Armoire A"  # Déplacer
   recycle loc set --part=42 --loc="Boite Roulements"    # Localiser une pièce
-  
+
+  # Backup & Restore
+  recycle dump                                          # Créer backup_YYYYMMDD_HHMMSS.json
+  recycle dump --file=my_backup.json                    # Sauvegarde personnalisée
+  recycle restore --file=backup_20231208_143052.json    # Restaurer (avec confirmation)
+  recycle restore --file=backup.json --force            # Restaurer sans confirmation
+
   # Documentation
   recycle attach --id=12 --file=./datasheet.pdf
   recycle files --id=12`)
@@ -72,6 +80,14 @@ func main() {
 	case "files":
 		if err := cmdFiles(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur files: %v", err)
+		}
+	case "dump":
+		if err := cmdDump(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur dump: %v", err)
+		}
+	case "restore":
+		if err := cmdRestore(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur restore: %v", err)
 		}
 	case "import":
 		if err := cmdImport(db, os.Args[2:]); err != nil {
