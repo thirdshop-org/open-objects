@@ -73,20 +73,10 @@ func cmdAdd(db *sql.DB, args []string) error {
 		locationID = &loc.ID
 	}
 
-	// Insérer avec ou sans localisation
-	var result sql.Result
-	if locationID != nil {
-		result, err = db.Exec("INSERT INTO parts (type, name, props, location_id) VALUES (?, ?, ?, ?)",
-			*typeName, *name, string(normalizedJSON), *locationID)
-	} else {
-		result, err = db.Exec("INSERT INTO parts (type, name, props) VALUES (?, ?, ?)",
-			*typeName, *name, string(normalizedJSON))
-	}
+	id, err := CreatePart(db, *typeName, *name, string(normalizedJSON), locationID)
 	if err != nil {
 		return err
 	}
-
-	id, _ := result.LastInsertId()
 	fmt.Printf("✓ Pièce ajoutée [ID: %d]\n", id)
 	if *typeName != "" {
 		fmt.Printf("  Type: %s\n", *typeName)
@@ -111,13 +101,11 @@ func cmdAdd(db *sql.DB, args []string) error {
 }
 
 func cmdList(db *sql.DB) error {
-	rows, err := db.Query("SELECT id, type, name, props, location_id FROM parts ORDER BY id")
+	parts, err := ListAllParts(db)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-
-	return printPartsTableWithAttachments(db, rows, "Total")
+	return printPartsTableWithAttachments(db, parts, "Total")
 }
 
 func cmdSearch(db *sql.DB, args []string) error {
@@ -130,90 +118,17 @@ func cmdSearch(db *sql.DB, args []string) error {
 		return err
 	}
 
-	// Parser le critère de propriété si présent
-	var propName, propExact string
-	var propMin, propMax float64
-	var isRange bool
-
-	if *propSearch != "" {
-		criteria, err := ParseSearchProp(*propSearch)
-		if err != nil {
-			return err
-		}
-		propName = criteria.PropName
-		isRange = criteria.IsRange
-		propExact = criteria.ExactVal
-		propMin = criteria.MinVal
-		propMax = criteria.MaxVal
-	}
-
-	// Requête unique avec CTEs pour lisibilité
-	query := `
-		WITH 
-		-- Paramètres de recherche
-		params AS (
-			SELECT 
-				$type      AS filter_type,
-				$name      AS filter_name,
-				$prop_name AS prop_name,
-				$prop_exact AS prop_exact,
-				$prop_min  AS prop_min,
-				$prop_max  AS prop_max,
-				$is_range  AS is_range
-		),
-		
-		-- Filtre par type
-		filtered_by_type AS (
-			SELECT p.* 
-			FROM parts p, params
-			WHERE params.filter_type = '' 
-			   OR p.type = params.filter_type
-		),
-		
-		-- Filtre par nom
-		filtered_by_name AS (
-			SELECT f.* 
-			FROM filtered_by_type f, params
-			WHERE params.filter_name = '' 
-			   OR f.name LIKE '%' || params.filter_name || '%'
-		),
-		
-		-- Filtre par propriété JSON
-		filtered_by_prop AS (
-			SELECT f.* 
-			FROM filtered_by_name f, params
-			WHERE params.prop_name = ''
-			   OR (
-			       CASE 
-			           WHEN params.is_range THEN
-			               CAST(json_extract(f.props, '$.' || params.prop_name) AS REAL) 
-			               BETWEEN params.prop_min AND params.prop_max
-			           ELSE
-			               CAST(json_extract(f.props, '$.' || params.prop_name) AS TEXT) = params.prop_exact
-			       END
-			   )
-		)
-		
-		SELECT id, type, name, props, location_id 
-		FROM filtered_by_prop
-		ORDER BY id
-	`
-
-	rows, err := db.Query(query,
-		sql.Named("type", *typeName),
-		sql.Named("name", *nameSearch),
-		sql.Named("prop_name", propName),
-		sql.Named("prop_exact", propExact),
-		sql.Named("prop_min", propMin),
-		sql.Named("prop_max", propMax),
-		sql.Named("is_range", isRange),
-	)
+	criteria, err := MustCriteriaFromProp(*propSearch)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
-	return printPartsTableWithAttachments(db, rows, "Résultats")
+	parts, err := SearchPartsDB(db, *typeName, *nameSearch, criteria)
+	if err != nil {
+		return err
+	}
+
+	return printPartsTableWithAttachments(db, parts, "Résultats")
 }
 
 func cmdTemplates() error {
@@ -655,40 +570,13 @@ func cmdLocSet(db *sql.DB, args []string) error {
 
 // --- Helpers d'affichage ---
 
-// PartRow représente une ligne de pièce pour l'affichage
-type PartRow struct {
-	ID         int
-	TypeName   string
-	Name       string
-	Props      string
-	LocationID sql.NullInt64
-}
-
-func printPartsTableWithAttachments(db *sql.DB, rows *sql.Rows, countLabel string) error {
-	// Collecter toutes les lignes d'abord
-	var parts []PartRow
+func printPartsTableWithAttachments(db *sql.DB, parts []PartRecord, countLabel string) error {
 	var partIDs []int
 	var locationIDs []int
-
-	for rows.Next() {
-		var id int
-		var typeName, name string
-		var propsRaw sql.NullString
-		var locationID sql.NullInt64
-
-		if err := rows.Scan(&id, &typeName, &name, &propsRaw, &locationID); err != nil {
-			return err
-		}
-
-		propsStr := "{}"
-		if propsRaw.Valid {
-			propsStr = propsRaw.String
-		}
-
-		parts = append(parts, PartRow{id, typeName, name, propsStr, locationID})
-		partIDs = append(partIDs, id)
-		if locationID.Valid {
-			locationIDs = append(locationIDs, int(locationID.Int64))
+	for _, p := range parts {
+		partIDs = append(partIDs, p.ID)
+		if p.LocationID.Valid {
+			locationIDs = append(locationIDs, int(p.LocationID.Int64))
 		}
 	}
 
@@ -702,9 +590,13 @@ func printPartsTableWithAttachments(db *sql.DB, rows *sql.Rows, countLabel strin
 	fmt.Println("├─────┼──────────────┼────────────────────────────┼────────────────────────────────────────┼───────┤")
 
 	for _, p := range parts {
-		displayType := truncate(p.TypeName, 12)
+		displayType := truncate(p.Type, 12)
 		displayName := truncate(p.Name, 26)
-		displayProps := truncate(p.Props, 38)
+		propsStr := "{}"
+		if p.Props.Valid {
+			propsStr = p.Props.String
+		}
+		displayProps := truncate(propsStr, 38)
 
 		// Indicateur de fichiers attachés
 		docsIndicator := ""
@@ -721,8 +613,8 @@ func printPartsTableWithAttachments(db *sql.DB, rows *sql.Rows, countLabel strin
 	fmt.Printf("\n%s: %d pièce(s)\n", countLabel, len(parts))
 
 	// Collecter pièces avec docs et pièces avec localisation
-	var partsWithDocs []PartRow
-	var partsWithLoc []PartRow
+	var partsWithDocs []PartRecord
+	var partsWithLoc []PartRecord
 	for _, p := range parts {
 		if attachments, ok := attachmentsMap[p.ID]; ok && len(attachments) > 0 {
 			partsWithDocs = append(partsWithDocs, p)

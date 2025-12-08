@@ -15,6 +15,7 @@ Usage:
 Commandes:
   add        Ajouter une pièce au stock
   attach     Attacher un fichier (PDF, photo) à une pièce
+  serve      Lancer l'API HTTP (mode serveur)
   dump       Créer une sauvegarde complète (JSON)
   files      Lister les fichiers attachés
   import     Importer des pièces depuis un fichier CSV ou JSON
@@ -80,6 +81,10 @@ func main() {
 	case "files":
 		if err := cmdFiles(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur files: %v", err)
+		}
+	case "serve":
+		if err := cmdServe(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur serve: %v", err)
 		}
 	case "dump":
 		if err := cmdDump(db, os.Args[2:]); err != nil {
