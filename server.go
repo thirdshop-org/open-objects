@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // PartAPIResponse représente une pièce renvoyée par l'API
@@ -18,6 +20,7 @@ type PartAPIResponse struct {
 	Name     string          `json:"name"`
 	Props    json.RawMessage `json:"props"`
 	Location string          `json:"location,omitempty"`
+	Source   string          `json:"source,omitempty"` // "local" ou nom du peer
 }
 
 // LocationAPIResponse représente une localisation renvoyée par l'API
@@ -40,6 +43,7 @@ func cmdServe(db *sql.DB, args []string) error {
 
 	// charger les templates HTML embarqués
 	mustLoadWebTemplates()
+	httpClient := &http.Client{Timeout: 500 * time.Millisecond}
 
 	mux := http.NewServeMux()
 
@@ -125,6 +129,37 @@ func cmdServe(db *sql.DB, args []string) error {
 		nameSearch := r.URL.Query().Get("name")
 		propSearch := r.URL.Query().Get("prop")
 
+		results, err := searchParts(db, typeName, nameSearch, propSearch)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// Fan-out fédéré si aucun résultat local
+		if len(results) == 0 {
+			fed, _ := fetchFederated(db, httpClient, typeName, nameSearch, propSearch)
+			results = append(results, fed...)
+		}
+		writeJSON(w, http.StatusOK, results)
+	})
+
+	// API fédérée (lecture seule) protégée par token
+	mux.HandleFunc("/api/federated/search", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		token := extractBearer(r.Header.Get("Authorization"))
+		if token == "" {
+			http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
+		if !isTokenAuthorized(db, token) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		typeName := r.URL.Query().Get("type")
+		nameSearch := r.URL.Query().Get("name")
+		propSearch := r.URL.Query().Get("prop")
 		results, err := searchParts(db, typeName, nameSearch, propSearch)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -273,9 +308,77 @@ func searchParts(db *sql.DB, typeName, nameSearch, propSearch string) ([]PartAPI
 			Name:     p.Name,
 			Props:    propJSON,
 			Location: locPath,
+			Source:   "local",
 		})
 	}
 	return results, nil
+}
+
+// fetchFederated interroge les peers avec timeout et agrège les résultats
+func fetchFederated(db *sql.DB, client *http.Client, typeName, nameSearch, propSearch string) ([]PartAPIResponse, error) {
+	peers, err := ListPeers(db)
+	if err != nil {
+		return nil, err
+	}
+	if len(peers) == 0 {
+		return nil, nil
+	}
+
+	type res struct {
+		results []PartAPIResponse
+	}
+	ch := make(chan res, len(peers))
+
+	for _, peer := range peers {
+		p := peer
+		go func() {
+			url := fmt.Sprintf("%s/api/federated/search?type=%s&name=%s&prop=%s",
+				strings.TrimRight(p.URL, "/"),
+				urlQueryEscape(typeName),
+				urlQueryEscape(nameSearch),
+				urlQueryEscape(propSearch),
+			)
+			req, err := http.NewRequest(http.MethodGet, url, nil)
+			if err != nil {
+				ch <- res{}
+				return
+			}
+			req.Header.Set("Authorization", "Bearer "+p.APIKey)
+			resp, err := client.Do(req)
+			if err != nil {
+				ch <- res{}
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				ch <- res{}
+				return
+			}
+			var payload []PartAPIResponse
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				ch <- res{}
+				return
+			}
+			for i := range payload {
+				payload[i].Source = p.Name
+			}
+			ch <- res{results: payload}
+		}()
+	}
+
+	var aggregated []PartAPIResponse
+	for i := 0; i < len(peers); i++ {
+		r := <-ch
+		aggregated = append(aggregated, r.results...)
+	}
+	return aggregated, nil
+}
+
+func urlQueryEscape(s string) string {
+	if s == "" {
+		return ""
+	}
+	return template.URLQueryEscaper(s)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
@@ -291,10 +394,29 @@ func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization")
 		if r.Method == http.MethodOptions {
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// extractBearer récupère le token du header Authorization
+func extractBearer(h string) string {
+	const prefix = "Bearer "
+	if strings.HasPrefix(strings.TrimSpace(h), prefix) {
+		return strings.TrimSpace(h[len(prefix):])
+	}
+	return ""
+}
+
+// isTokenAuthorized vérifie si un token correspond à un peer enregistré
+func isTokenAuthorized(db *sql.DB, token string) bool {
+	if token == "" {
+		return false
+	}
+	var count int
+	_ = db.QueryRow("SELECT COUNT(*) FROM peers WHERE api_key = ?", token).Scan(&count)
+	return count > 0
 }

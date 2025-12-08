@@ -17,6 +17,7 @@ Commandes:
   attach     Attacher un fichier (PDF, photo) à une pièce
   label      Générer une étiquette PNG (QR code) pour une pièce
   serve      Lancer l'API HTTP (mode serveur)
+  network    Gérer les pairs fédérés (peers)
   dump       Créer une sauvegarde complète (JSON)
   files      Lister les fichiers attachés
   import     Importer des pièces depuis un fichier CSV ou JSON
@@ -93,6 +94,10 @@ func main() {
 	case "serve":
 		if err := cmdServe(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur serve: %v", err)
+		}
+	case "network":
+		if err := cmdNetwork(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur network: %v", err)
 		}
 	case "dump":
 		if err := cmdDump(db, os.Args[2:]); err != nil {

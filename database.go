@@ -49,6 +49,11 @@ func runMigrations(db *sql.DB) error {
 		return err
 	}
 
+	// Migration v6: Table des peers (fédération)
+	if err := migrateV6(db); err != nil {
+		return err
+	}
+
 	// Index
 	if err := createIndexes(db); err != nil {
 		return err
@@ -122,6 +127,20 @@ func migrateV5(db *sql.DB) error {
 	return err
 }
 
+// migrateV6 crée la table des peers pour la fédération
+func migrateV6(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS peers (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			url TEXT NOT NULL,
+			api_key TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	return err
+}
+
 func createIndexes(db *sql.DB) error {
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_parts_name ON parts (name)",
@@ -129,6 +148,7 @@ func createIndexes(db *sql.DB) error {
 		"CREATE INDEX IF NOT EXISTS idx_parts_location ON parts (location_id)",
 		"CREATE INDEX IF NOT EXISTS idx_attachments_part_id ON attachments (part_id)",
 		"CREATE INDEX IF NOT EXISTS idx_locations_parent ON locations (parent_id)",
+		"CREATE INDEX IF NOT EXISTS idx_peers_url ON peers (url)",
 	}
 
 	for _, idx := range indexes {
