@@ -41,6 +41,13 @@ func ParseSearchProp(prop string) (*SearchCriteria, error) {
 		criteria.MinVal = min
 		criteria.MaxVal = max
 	} else {
+		// Si on a un séparateur de range mais pas un range valide -> erreur
+		if strings.Contains(value, "..") {
+			return nil, fmt.Errorf("intervalle invalide: %s", value)
+		}
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("valeur vide pour le critère %s", criteria.PropName)
+		}
 		criteria.IsRange = false
 		criteria.ExactVal = value
 	}
@@ -78,4 +85,3 @@ func toFloat64(v interface{}) (float64, bool) {
 		return 0, false
 	}
 }
-

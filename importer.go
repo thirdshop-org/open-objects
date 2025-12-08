@@ -127,7 +127,7 @@ func importCSV(db *sql.DB, opts ImportOptions) (*ImportStats, error) {
 			msg := fmt.Sprintf("ligne %d: type '%s' inconnu (utilisez un template existant)", lineNum, typeName)
 			stats.ErrorMsgs = append(stats.ErrorMsgs, msg)
 			if opts.StopOnErr {
-				return stats, fmt.Errorf(msg)
+				return stats, fmt.Errorf("%s", msg)
 			}
 			continue
 		}
@@ -276,7 +276,7 @@ func importJSON(db *sql.DB, opts ImportOptions) (*ImportStats, error) {
 			msg := fmt.Sprintf("enregistrement %d: type '%s' inconnu (utilisez un template existant)", lineNum, typeName)
 			stats.ErrorMsgs = append(stats.ErrorMsgs, msg)
 			if opts.StopOnErr {
-				return stats, fmt.Errorf(msg)
+				return stats, fmt.Errorf("%s", msg)
 			}
 			continue
 		}
