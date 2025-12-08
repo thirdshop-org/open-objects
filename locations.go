@@ -131,30 +131,56 @@ func FindLocationByID(db *sql.DB, id int) (*Location, error) {
 // GetFullPath retourne le chemin complet d'une localisation (Atelier > Meuble > Boîte)
 func GetFullPath(db *sql.DB, locationID int) (string, error) {
 	var parts []string
-	currentID := locationID
 
-	// Remonter l'arborescence jusqu'à la racine
-	for {
+	query := `
+		WITH RECURSIVE location_tree AS (
+			SELECT 
+				id, 
+				name, 
+				parent_id, 
+				0 as level 
+			FROM 
+				locations 
+			WHERE 
+				id = $locationID
+			UNION ALL
+			SELECT 
+				l.id, 
+				l.name, 
+				l.parent_id, 
+				lt.level + 1 
+			FROM 
+				locations l
+			JOIN 
+				location_tree lt 
+			ON 
+				l.parent_id = lt.id 
+				AND 
+				l.id != lt.id 
+				AND 
+				lt.level < 100
+		)
+		SELECT 
+			name, 
+			level 
+		FROM 
+			location_tree 
+		ORDER BY level DESC
+	`
+	rows, err := db.Query(query, locationID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
 		var name string
-		var parentID sql.NullInt64
-
-		err := db.QueryRow(`
-			SELECT name, parent_id FROM locations WHERE id = ?
-		`, currentID).Scan(&name, &parentID)
-
-		if err == sql.ErrNoRows {
-			break
-		}
+		var level int
+		err := rows.Scan(&name, &level)
 		if err != nil {
 			return "", err
 		}
-
-		parts = append([]string{name}, parts...) // Préfixer
-
-		if !parentID.Valid {
-			break // Atteint la racine
-		}
-		currentID = int(parentID.Int64)
+		parts = append([]string{name}, parts...)
 	}
 
 	if len(parts) == 0 {
@@ -445,4 +471,3 @@ func GetLocationsMap(db *sql.DB, locationIDs []int) (map[int]string, error) {
 
 	return result, nil
 }
-
