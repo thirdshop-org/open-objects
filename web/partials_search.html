@@ -1,0 +1,14 @@
+{{ define "partials_search" }}
+{{ if .Results }}
+  {{ range .Results }}
+    <div class="item">
+      <a href="/view/{{ .ID }}">{{ .Name }}</a>
+      <div class="muted">#{{ .ID }} · {{ .Type }}</div>
+      {{ if .Location }}<div class="muted">📍 {{ .Location }}</div>{{ end }}
+    </div>
+  {{ end }}
+{{ else }}
+  <div class="muted">Aucun résultat</div>
+{{ end }}
+{{ end }}
+

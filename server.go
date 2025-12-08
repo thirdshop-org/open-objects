@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // PartAPIResponse représente une pièce renvoyée par l'API
@@ -36,7 +38,78 @@ func cmdServe(db *sql.DB, args []string) error {
 		return err
 	}
 
+	// charger les templates HTML embarqués
+	mustLoadWebTemplates()
+
 	mux := http.NewServeMux()
+
+	// asset statique htmx avec bon Content-Type
+	mux.HandleFunc("/static/htmx.min.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		data, err := webFS.ReadFile("web/static/htmx.min.js")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write(data)
+	})
+
+	// page d'accueil
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := tplIndex.ExecuteTemplate(w, "index", nil); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// page de détail
+	mux.HandleFunc("/view/", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.URL.Path[len("/view/"):]
+		id, err := strconv.Atoi(idStr)
+		if err != nil || id <= 0 {
+			http.NotFound(w, r)
+			return
+		}
+		meta, err := GetPartMeta(db, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !meta.Found {
+			http.NotFound(w, r)
+			return
+		}
+		if err := tplView.ExecuteTemplate(w, "view", meta); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// partial recherche (htmx)
+	mux.HandleFunc("/partials/search", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		typeName := ""
+		nameSearch := q
+		propSearch := ""
+		// si la requête contient un ':' on le traite comme critère prop
+		if strings.Contains(q, ":") {
+			propSearch = q
+			nameSearch = ""
+		}
+		results, err := searchParts(db, typeName, nameSearch, propSearch)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		data := struct {
+			Results []PartAPIResponse
+		}{Results: results}
+		if err := tplSearch.ExecuteTemplate(w, "partials_search", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

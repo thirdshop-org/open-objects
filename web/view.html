@@ -1,0 +1,35 @@
+{{ define "view" }}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ .Name }} ({{ .Type }})</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 24px; max-width: 720px; }
+    .title { font-size: 24px; margin-bottom: 8px; }
+    .muted { color: #777; }
+    pre { background: #f7f7f7; padding: 12px; overflow: auto; }
+    .actions button { margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <div class="title">{{ .Name }} <span class="muted">(#{{ .ID }})</span></div>
+  <div class="muted">Type : {{ .Type }}</div>
+  {{ if .LocationPath }}<div>📍 {{ .LocationPath }}</div>{{ end }}
+
+  <h3>Propriétés</h3>
+  <pre>{{ .PropsJSON }}</pre>
+
+  <div class="actions">
+    <button disabled>Sortir du stock (API à implémenter)</button>
+    <button disabled>Déplacer (API à implémenter)</button>
+  </div>
+
+  <div style="margin-top:16px;">
+    <a href="/">⬅ Retour recherche</a>
+  </div>
+</body>
+</html>
+{{ end }}
+

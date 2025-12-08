@@ -1,0 +1,35 @@
+{{ define "index" }}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Recycle - Recherche</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 24px; }
+    .search-box { max-width: 640px; margin: auto; }
+    input[type="text"] { width: 100%; padding: 14px; font-size: 18px; }
+    .results { margin-top: 24px; }
+    .item { padding: 12px 0; border-bottom: 1px solid #eee; }
+    .item a { text-decoration: none; color: #0a5; font-weight: bold; }
+    .muted { color: #777; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="search-box">
+    <h1>Recycle</h1>
+    <input 
+      type="text" 
+      name="q" 
+      placeholder="Rechercher une pièce (nom, type, prop:val)"
+      hx-get="/partials/search"
+      hx-trigger="keyup changed delay:300ms"
+      hx-target="#results"
+      hx-include="[name='q']"
+    />
+    <div id="results" class="results"></div>
+  </div>
+</body>
+</html>
+{{ end }}
+

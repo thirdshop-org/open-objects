@@ -19,6 +19,7 @@ type PartMeta struct {
 	ID           int
 	Type         string
 	Name         string
+	PropsJSON    string
 	LocationID   sql.NullInt64
 	LocationPath string
 	Found        bool
@@ -35,6 +36,9 @@ func GetPartMeta(db *sql.DB, id int) (*PartMeta, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if props.Valid {
+		p.PropsJSON = props.String
 	}
 	if p.LocationID.Valid {
 		path, _ := GetFullPath(db, int(p.LocationID.Int64))
