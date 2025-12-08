@@ -354,6 +354,41 @@ func cmdRestore(db *sql.DB, args []string) error {
 	return nil
 }
 
+// cmdLabel génère une étiquette PNG avec QR code sur stdout
+func cmdLabel(db *sql.DB, args []string) error {
+	fs := flag.NewFlagSet("label", flag.ExitOnError)
+	id := fs.Int("id", 0, "ID de la pièce")
+	url := fs.String("url", "", "URL ou action du QR (défaut: recycle://view/{id})")
+	format := fs.String("format", "png", "Format de sortie (png)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id <= 0 {
+		return fmt.Errorf("ID requis (--id)")
+	}
+	if *format != "png" {
+		return fmt.Errorf("format '%s' non supporté (seul png est supporté)", *format)
+	}
+
+	meta, err := GetPartMeta(db, *id)
+	if err != nil {
+		return err
+	}
+	if !meta.Found {
+		return fmt.Errorf("pièce ID %d introuvable", *id)
+	}
+
+	labelURL := *url
+	if labelURL == "" {
+		labelURL = DefaultLabelURL(*id)
+	}
+
+	if err := GenerateLabelPNG(meta, labelURL, os.Stdout); err != nil {
+		return err
+	}
+	return nil
+}
+
 func cmdLoc(db *sql.DB, args []string) error {
 	if len(args) == 0 {
 		// Sans argument, afficher l'arborescence

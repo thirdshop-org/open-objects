@@ -15,6 +15,7 @@ Usage:
 Commandes:
   add        Ajouter une pièce au stock
   attach     Attacher un fichier (PDF, photo) à une pièce
+  label      Générer une étiquette PNG (QR code) pour une pièce
   serve      Lancer l'API HTTP (mode serveur)
   dump       Créer une sauvegarde complète (JSON)
   files      Lister les fichiers attachés
@@ -38,6 +39,9 @@ Exemples:
   recycle loc add "Boite Roulements" --in="Etabli Rouge" --type=BOX
   recycle loc move "Boite Roulements" --to="Armoire A"  # Déplacer
   recycle loc set --part=42 --loc="Boite Roulements"    # Localiser une pièce
+
+  # Étiquettes & QR
+  recycle label --id=42 --format=png > stick.png
 
   # Backup & Restore
   recycle dump                                          # Créer backup_YYYYMMDD_HHMMSS.json
@@ -77,6 +81,10 @@ func main() {
 	case "attach":
 		if err := cmdAttach(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur attach: %v", err)
+		}
+	case "label":
+		if err := cmdLabel(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur label: %v", err)
 		}
 	case "files":
 		if err := cmdFiles(db, os.Args[2:]); err != nil {

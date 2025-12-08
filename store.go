@@ -14,6 +14,36 @@ type PartRecord struct {
 	LocationID sql.NullInt64
 }
 
+// PartMeta pour affichage et QR
+type PartMeta struct {
+	ID           int
+	Type         string
+	Name         string
+	LocationID   sql.NullInt64
+	LocationPath string
+	Found        bool
+}
+
+// GetPartMeta retourne les infos d'une pièce par ID
+func GetPartMeta(db *sql.DB, id int) (*PartMeta, error) {
+	var p PartMeta
+	var props sql.NullString
+	err := db.QueryRow(`SELECT id, type, name, props, location_id FROM parts WHERE id = ?`, id).
+		Scan(&p.ID, &p.Type, &p.Name, &props, &p.LocationID)
+	if err == sql.ErrNoRows {
+		return &PartMeta{Found: false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if p.LocationID.Valid {
+		path, _ := GetFullPath(db, int(p.LocationID.Int64))
+		p.LocationPath = path
+	}
+	p.Found = true
+	return &p, nil
+}
+
 // CreatePart insère une pièce et retourne son ID
 func CreatePart(db *sql.DB, typeName, name, propsJSON string, locationID *int) (int64, error) {
 	var res sql.Result
