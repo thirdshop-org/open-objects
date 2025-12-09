@@ -1,0 +1,80 @@
+{{ define "scan" }}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Scan QR - Recycle</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    video { width: 100%; max-width: 480px; border: 1px solid #ccc; border-radius: 6px; }
+    .status { margin-top: 12px; color: #333; }
+    .error { color: #b00; }
+    .hint { color: #666; font-size: 12px; }
+    button { padding: 10px 16px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Scanner un QR code</h1>
+  <div id="unsupported" class="error" style="display:none;">
+    La capture vidéo n'est pas supportée par ce navigateur. Essayez Chrome/Firefox récent ou scannez avec l'appareil photo et ouvrez le lien généré.
+  </div>
+  <video id="video" playsinline></video>
+  <div class="status" id="status">Démarrage de la caméra...</div>
+  <div class="hint">Le QR doit contenir une URL de type recycle://view/{id} ou /view/{id}</div>
+  <button id="stopBtn" style="display:none;">Arrêter</button>
+
+  <script type="module">
+    import QrScanner from '/static/qr-scanner.min.js';
+    QrScanner.WORKER_PATH = '/static/qr-scanner-worker.min.js';
+    (async function() {
+      const video = document.getElementById('video');
+      const status = document.getElementById('status');
+      const stopBtn = document.getElementById('stopBtn');
+      const unsupported = document.getElementById('unsupported');
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        unsupported.style.display = 'block';
+        status.textContent = 'Caméra non disponible.';
+        return;
+      }
+
+      let scanner;
+      try {
+        scanner = new QrScanner(
+          video,
+          result => {
+            status.textContent = 'QR détecté: ' + result;
+            const id = extractId(result);
+            if (id) {
+              scanner.stop();
+              window.location.href = '/view/' + id;
+            } else {
+              status.textContent = 'QR détecté mais non reconnu: ' + result;
+            }
+          },
+          { highlightScanRegion: true }
+        );
+        await scanner.start();
+        stopBtn.style.display = 'inline-block';
+        stopBtn.onclick = () => { scanner.stop(); status.textContent = 'Scanner arrêté.'; };
+        status.textContent = 'Caméra active, scannez un QR...';
+      } catch (e) {
+        unsupported.style.display = 'block';
+        status.textContent = 'Impossible de démarrer la caméra : ' + e;
+      }
+
+      function extractId(text) {
+        let m = text.match(/recycle:\/\/view\/(\d+)/i);
+        if (m) return m[1];
+        m = text.match(/https?:\/\/[^\s]+\/view\/(\d+)/i);
+        if (m) return m[1];
+        m = text.match(/^\d+$/);
+        if (m) return m[0];
+        return null;
+      }
+    })();
+  </script>
+</body>
+</html>
+{{ end }}
+

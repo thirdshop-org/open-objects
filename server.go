@@ -58,6 +58,26 @@ func cmdServe(db *sql.DB, args []string) error {
 		w.Write(data)
 	})
 
+	// qr-scanner (ESM) + worker
+	mux.HandleFunc("/static/qr-scanner.min.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		data, err := webFS.ReadFile("web/static/qr-scanner.min.js")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write(data)
+	})
+	mux.HandleFunc("/static/qr-scanner-worker.min.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		data, err := webFS.ReadFile("web/static/qr-scanner-worker.min.js")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write(data)
+	})
+
 	// page d'accueil
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -65,6 +85,17 @@ func cmdServe(db *sql.DB, args []string) error {
 			return
 		}
 		if err := tplIndex.ExecuteTemplate(w, "index", nil); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// page de scan QR
+	mux.HandleFunc("/scan", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/scan" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := tplScan.ExecuteTemplate(w, "scan", nil); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
