@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Docker
+docker/
+Dockerfile*
+docker-compose*
+
+# Documentation
+README.md
+*.md
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+test/
+
+# Temporary files
+*.tmp
+*.log
+
+# Database files (will be mounted as volume)
+*.db
+*.sqlite
+*.sqlite3
