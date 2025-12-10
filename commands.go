@@ -392,29 +392,29 @@ func cmdLabel(db *sql.DB, args []string) error {
 // cmdLabelLoc génère une étiquette pour une localisation (path)
 func cmdLabelLoc(db *sql.DB, args []string) error {
 	fs := flag.NewFlagSet("label-loc", flag.ExitOnError)
-	locID := fs.Int("id", 0, "ID de la localisation")
+	locationID := fs.Int("id", 0, "ID de la localisation")
 	url := fs.String("url", "", "QR personnalisé (défaut: LOC-{id})")
 	format := fs.String("format", "png", "Format de sortie (png)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *locID <= 0 {
+	if *locationID <= 0 {
 		return fmt.Errorf("id localisation requis (--id)")
 	}
 	if *format != "png" {
 		return fmt.Errorf("format '%s' non supporté (seul png est supporté)", *format)
 	}
 
-	path, err := GetFullPath(db, *locID)
+	path, err := GetFullPath(db, *locationID)
 	if err != nil {
-		return err
+		return fmt.Errorf("localisation ID %d introuvable: %v", *locationID, err)
 	}
 	qrContent := *url
 	if qrContent == "" {
-		qrContent = fmt.Sprintf("LOC-%d", *locID)
+		qrContent = fmt.Sprintf("LOC-%d", *locationID)
 	}
 
-	if err := GenerateLocationLabelPNG(*locID, path, qrContent, os.Stdout); err != nil {
+	if err := GenerateLocationLabelPNG(*locationID, path, qrContent, os.Stdout); err != nil {
 		return err
 	}
 	return nil

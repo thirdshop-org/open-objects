@@ -141,8 +141,8 @@ func GetFullPath(db *sql.DB, locationID int) (string, error) {
 				0 as level 
 			FROM 
 				locations 
-			WHERE 
-				id = $locationID
+			WHERE
+				id = ?
 			UNION ALL
 			SELECT 
 				l.id, 
