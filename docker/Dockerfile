@@ -4,10 +4,10 @@ FROM golang:1.25.4-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Copy go mod and sum files
-COPY go.mod go.sum ./
+# Copy go mod file
+COPY go.mod ./
 
-# Download dependencies
+# Download dependencies (go.sum will be generated if needed)
 RUN go mod download
 
 # Copy source code
