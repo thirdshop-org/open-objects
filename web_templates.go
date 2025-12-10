@@ -9,10 +9,11 @@ import (
 var webFS embed.FS
 
 var (
-	tplIndex  *template.Template
-	tplView   *template.Template
-	tplSearch *template.Template
-	tplScan   *template.Template
+	tplIndex    *template.Template
+	tplView     *template.Template
+	tplSearch   *template.Template
+	tplScan     *template.Template
+	tplLocation *template.Template
 )
 
 func mustLoadWebTemplates() {
@@ -20,5 +21,5 @@ func mustLoadWebTemplates() {
 	tplView = template.Must(template.ParseFS(webFS, "web/view.html"))
 	tplSearch = template.Must(template.ParseFS(webFS, "web/partials_search.html"))
 	tplScan = template.Must(template.ParseFS(webFS, "web/scan.html"))
+	tplLocation = template.Must(template.ParseFS(webFS, "web/location.html"))
 }
-

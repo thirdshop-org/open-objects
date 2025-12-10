@@ -1,13 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
 	"io"
+	"net/url"
 
 	"github.com/skip2/go-qrcode"
 	"golang.org/x/image/font"
@@ -16,21 +16,13 @@ import (
 )
 
 // GenerateLabelPNG génère une étiquette PNG avec QR et texte et écrit sur writer
-func GenerateLabelPNG(dbPath *PartMeta, url string, w io.Writer) error {
+func GenerateLabelPNG(dbPath *PartMeta, qrContent string, w io.Writer) error {
 	if dbPath == nil || !dbPath.Found {
 		return fmt.Errorf("pièce introuvable")
 	}
 
-	// Contenu du QR : JSON avec id, type, name et URL
-	payload := map[string]interface{}{
-		"id":   dbPath.ID,
-		"type": dbPath.Type,
-		"name": dbPath.Name,
-		"url":  url,
-	}
-	payloadBytes, _ := json.Marshal(payload)
-
-	qr, err := qrcode.New(string(payloadBytes), qrcode.Medium)
+	// Contenu du QR : préfixe PRT-<id>
+	qr, err := qrcode.New(qrContent, qrcode.Medium)
 	if err != nil {
 		return err
 	}
@@ -38,7 +30,7 @@ func GenerateLabelPNG(dbPath *PartMeta, url string, w io.Writer) error {
 
 	// Dessiner texte + QR sur un canvas plus grand
 	textLines := []string{
-		fmt.Sprintf("#%d", dbPath.ID),
+		fmt.Sprintf("PRT-%d", dbPath.ID),
 		dbPath.Name,
 		dbPath.Type,
 	}
@@ -85,8 +77,58 @@ func addLabelText(img *image.RGBA, text string, x, y int, face font.Face, col co
 	d.DrawString(text)
 }
 
-// DefaultLabelURL construit une URL standardisée pour la pièce
-func DefaultLabelURL(id int) string {
-	// Utiliser un schéma interne; peut être remplacé par une URL publique
-	return fmt.Sprintf("recycle://view/%d", id)
+// DefaultLabelQRContent construit le contenu QR standard pour une pièce
+func DefaultLabelQRContent(id int) string {
+	return fmt.Sprintf("PRT-%d", id)
+}
+
+// DefaultLocationLabelURL construit l'URL encodée pour une localisation (fallback)
+func DefaultLocationLabelURL(path string) string {
+	escaped := url.QueryEscape(path)
+	return fmt.Sprintf("/location?path=%s", escaped)
+}
+
+// GenerateLocationLabelPNG génère une étiquette PNG pour un lieu (ID + path) avec QR
+func GenerateLocationLabelPNG(locID int, path, qrContent string, w io.Writer) error {
+	if locID <= 0 {
+		return fmt.Errorf("id localisation invalide")
+	}
+	if path == "" {
+		return fmt.Errorf("path vide")
+	}
+
+	qr, err := qrcode.New(qrContent, qrcode.Medium)
+	if err != nil {
+		return err
+	}
+	qrImg := qr.Image(256)
+
+	textLines := []string{
+		fmt.Sprintf("LOC-%d", locID),
+		path,
+	}
+
+	qrSize := qrImg.Bounds().Dx()
+	padding := 10
+	lineHeight := 14
+	textHeight := lineHeight * len(textLines)
+	width := qrSize + padding*2
+	height := qrSize + padding*3 + textHeight
+
+	canvas := image.NewRGBA(image.Rect(0, 0, width, height))
+	white := color.RGBA{255, 255, 255, 255}
+	black := color.RGBA{0, 0, 0, 255}
+	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{white}, image.Point{}, draw.Src)
+
+	offset := image.Pt(padding, padding)
+	draw.Draw(canvas, image.Rect(offset.X, offset.Y, offset.X+qrSize, offset.Y+qrSize), qrImg, image.Point{}, draw.Src)
+
+	face := basicfont.Face7x13
+	y := padding + qrSize + padding + face.Ascent
+	for _, line := range textLines {
+		addLabelText(canvas, line, padding, y, face, black)
+		y += lineHeight
+	}
+
+	return png.Encode(w, canvas)
 }

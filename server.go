@@ -100,6 +100,35 @@ func cmdServe(db *sql.DB, args []string) error {
 		}
 	})
 
+	// page localisation
+	mux.HandleFunc("/location", func(w http.ResponseWriter, r *http.Request) {
+		pathVal := r.URL.Query().Get("path")
+		idVal := r.URL.Query().Get("id")
+		if idVal == "" && pathVal == "" {
+			http.Error(w, "id ou path manquant", http.StatusBadRequest)
+			return
+		}
+		if pathVal == "" && idVal != "" {
+			id, err := strconv.Atoi(idVal)
+			if err != nil || id <= 0 {
+				http.Error(w, "id invalide", http.StatusBadRequest)
+				return
+			}
+			p, err := GetFullPath(db, id)
+			if err != nil || p == "" {
+				http.Error(w, "localisation introuvable", http.StatusNotFound)
+				return
+			}
+			pathVal = p
+		}
+		data := struct {
+			Path string
+		}{Path: pathVal}
+		if err := tplLocation.ExecuteTemplate(w, "location", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
 	// page de détail
 	mux.HandleFunc("/view/", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.URL.Path[len("/view/"):]

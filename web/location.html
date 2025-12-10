@@ -1,0 +1,26 @@
+{{ define "location" }}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Localisation</title>
+  <style>
+    body { font-family: sans-serif; margin: 24px; max-width: 720px; }
+    .title { font-size: 22px; margin-bottom: 8px; }
+    .muted { color: #777; }
+    .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="title">Localisation</div>
+  <div class="card">
+    <div><strong>Chemin :</strong> {{ .Path }}</div>
+    <div class="muted">Utilisez cette étiquette pour identifier un lieu physique.</div>
+  </div>
+  <div style="margin-top:16px;">
+    <a href="/">⬅ Retour</a>
+  </div>
+</body>
+</html>
+{{ end }}
+

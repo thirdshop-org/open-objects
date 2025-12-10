@@ -44,10 +44,17 @@
           video,
           result => {
             status.textContent = 'QR détecté: ' + result;
-            const id = extractId(result);
-            if (id) {
+            const parsed = extractIdOrPath(result);
+            if (parsed.id) {
               scanner.stop();
-              window.location.href = '/view/' + id;
+              window.location.href = '/view/' + parsed.id;
+            } else if (parsed.locId) {
+              scanner.stop();
+              window.location.href = '/location?id=' + parsed.locId;
+            } else if (parsed.path) {
+              scanner.stop();
+              const p = encodeURIComponent(parsed.path);
+              window.location.href = '/location?path=' + p;
             } else {
               status.textContent = 'QR détecté mais non reconnu: ' + result;
             }
@@ -63,14 +70,26 @@
         status.textContent = 'Impossible de démarrer la caméra : ' + e;
       }
 
-      function extractId(text) {
-        let m = text.match(/recycle:\/\/view\/(\d+)/i);
-        if (m) return m[1];
+      function extractIdOrPath(text) {
+        let m = text.match(/^PRT-(\d+)$/i);
+        if (m) return { id: m[1] };
+        m = text.match(/^LOC-(\d+)$/i);
+        if (m) return { locId: m[1] };
+        m = text.match(/recycle:\/\/view\/(\d+)/i);
+        if (m) return { id: m[1] };
         m = text.match(/https?:\/\/[^\s]+\/view\/(\d+)/i);
-        if (m) return m[1];
+        if (m) return { id: m[1] };
+        m = text.match(/https?:\/\/[^\s]+\/location\?id=(\d+)/i);
+        if (m) return { locId: m[1] };
         m = text.match(/^\d+$/);
-        if (m) return m[0];
-        return null;
+        if (m) return { id: m[0] };
+        // localisation: webapp://loc?p=... ou /location?path=...
+        m = text.match(/webapp:\/\/loc\?p=([\w\-\._~\/]+)/i);
+        if (m) return { path: decodeURIComponent(m[1]) };
+        m = text.match(/\/location\?path=([\w\-\._~%\/]+)/i);
+        if (m) return { path: decodeURIComponent(m[1]) };
+        // sinon, si c'est lisible, on le tente comme path brut
+        return { path: text };
       }
     })();
   </script>

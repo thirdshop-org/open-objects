@@ -87,6 +87,10 @@ func main() {
 		if err := cmdLabel(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur label: %v", err)
 		}
+	case "label-loc":
+		if err := cmdLabelLoc(db, os.Args[2:]); err != nil {
+			log.Fatalf("Erreur label-loc: %v", err)
+		}
 	case "files":
 		if err := cmdFiles(db, os.Args[2:]); err != nil {
 			log.Fatalf("Erreur files: %v", err)
