@@ -1,6 +1,9 @@
 # Build stage
 FROM golang:1.25.4-alpine AS builder
 
+# Install build dependencies for CGO
+RUN apk add --no-cache build-base
+
 # Set working directory
 WORKDIR /app
 
