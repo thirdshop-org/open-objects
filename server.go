@@ -478,6 +478,14 @@ func cmdServe(db *sql.DB, args []string) error {
 
 		// Recherche par path
 		if pathStr := r.URL.Query().Get("path"); pathStr != "" {
+			limitStr := r.URL.Query().Get("limit")
+			limit := 50 // limite par défaut
+			if limitStr != "" {
+				if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+					limit = parsedLimit
+				}
+			}
+
 			locs, err := ListLocations(db)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -501,6 +509,11 @@ func cmdServe(db *sql.DB, args []string) error {
 						Description: l.Description,
 						Path:        path,
 					})
+
+					// Respecter la limite
+					if len(resp) >= limit {
+						break
+					}
 				}
 			}
 			writeJSON(w, http.StatusOK, resp)
@@ -509,6 +522,14 @@ func cmdServe(db *sql.DB, args []string) error {
 
 		// Recherche textuelle
 		if searchStr := r.URL.Query().Get("search"); searchStr != "" {
+			limitStr := r.URL.Query().Get("limit")
+			limit := 50 // limite par défaut
+			if limitStr != "" {
+				if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+					limit = parsedLimit
+				}
+			}
+
 			locs, err := ListLocations(db)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -532,6 +553,11 @@ func cmdServe(db *sql.DB, args []string) error {
 						Description: l.Description,
 						Path:        path,
 					})
+
+					// Respecter la limite
+					if len(resp) >= limit {
+						break
+					}
 				}
 			}
 			writeJSON(w, http.StatusOK, resp)
