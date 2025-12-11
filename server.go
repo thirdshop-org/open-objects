@@ -6,8 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -100,6 +103,17 @@ func cmdServe(db *sql.DB, args []string) error {
 		}
 	})
 
+	// page d'ajout de pièce
+	mux.HandleFunc("/add", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/add" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := tplAdd.ExecuteTemplate(w, "add", nil); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
 	// page localisation
 	mux.HandleFunc("/location", func(w http.ResponseWriter, r *http.Request) {
 		pathVal := r.URL.Query().Get("path")
@@ -179,6 +193,50 @@ func cmdServe(db *sql.DB, args []string) error {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	// Récupération des champs de template: /api/template-fields?type=moteur
+	mux.HandleFunc("/api/template-fields", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		typeName := r.URL.Query().Get("type")
+		if typeName == "" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"fields": []interface{}{}})
+			return
+		}
+
+		template, exists := Templates[typeName]
+		if !exists {
+			http.Error(w, "template not found", http.StatusNotFound)
+			return
+		}
+
+		fields := []map[string]interface{}{}
+		for fieldName, fieldDef := range template.Fields {
+			field := map[string]interface{}{
+				"name":        fieldName,
+				"description": fieldDef.Description,
+				"required":    fieldDef.Required,
+				"type":        "text",
+			}
+
+			if fieldDef.Domain != "" {
+				field["domain"] = fieldDef.Domain
+				if fieldDef.Domain == "tension" || fieldDef.Domain == "puissance" || fieldDef.Domain == "vitesse_rot" || fieldDef.Domain == "dimension" {
+					field["type"] = "number"
+				}
+			}
+
+			if fieldDef.DefaultUnit != "" {
+				field["unit"] = fieldDef.DefaultUnit
+			}
+
+			fields = append(fields, field)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{"fields": fields})
+	})
+
 	// Recherche: /api/search?type=...&name=...&prop=...
 	mux.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -228,22 +286,47 @@ func cmdServe(db *sql.DB, args []string) error {
 		writeJSON(w, http.StatusOK, results)
 	})
 
-	// Création de pièce: POST /api/parts  {type,name,props,loc}
+	// Création de pièce: POST /api/parts (multipart form avec photos optionnelles)
 	mux.HandleFunc("/api/parts", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var payload struct {
-			Type  string                 `json:"type"`
-			Name  string                 `json:"name"`
-			Props map[string]interface{} `json:"props"`
-			Loc   string                 `json:"loc"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+
+		// Limiter la taille du formulaire (10MB)
+		r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+
+		// Parser le formulaire multipart
+		err := r.ParseMultipartForm(10 << 20) // 10MB
+		if err != nil {
+			http.Error(w, "form too large or invalid", http.StatusBadRequest)
 			return
 		}
+
+		// Récupérer les valeurs du formulaire
+		payload := struct {
+			Type  string
+			Name  string
+			Props map[string]interface{}
+			Loc   string
+		}{}
+
+		payload.Type = r.FormValue("type")
+		payload.Name = r.FormValue("name")
+		payload.Loc = r.FormValue("loc")
+
+		// Parser les propriétés JSON
+		propsStr := r.FormValue("props")
+		if propsStr != "" {
+			if err := json.Unmarshal([]byte(propsStr), &payload.Props); err != nil {
+				http.Error(w, "invalid props JSON", http.StatusBadRequest)
+				return
+			}
+		} else {
+			payload.Props = map[string]interface{}{}
+		}
+
+		// Validation de base
 		if payload.Name == "" {
 			http.Error(w, "name is required", http.StatusBadRequest)
 			return
@@ -252,17 +335,14 @@ func cmdServe(db *sql.DB, args []string) error {
 			http.Error(w, fmt.Sprintf("type '%s' inconnu. Utilisez un template existant", payload.Type), http.StatusBadRequest)
 			return
 		}
-		if payload.Props == nil {
-			payload.Props = map[string]interface{}{}
-		}
-		// validation template
+
+		// Validation et normalisation des propriétés
 		if payload.Type != "" {
 			if err := ValidateProps(payload.Type, payload.Props); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
-		// normalisation
 		fieldUnits := GetFieldUnits(payload.Type)
 		normProps, err := NormalizeProps(payload.Props, fieldUnits)
 		if err != nil {
@@ -275,9 +355,9 @@ func cmdServe(db *sql.DB, args []string) error {
 			return
 		}
 
+		// Gestion de la localisation
 		var locationID *int
 		if payload.Loc != "" {
-			// essayer ID puis nom
 			var id int
 			if _, err := fmt.Sscanf(payload.Loc, "%d", &id); err == nil {
 				if _, err := FindLocationByID(db, id); err != nil {
@@ -295,11 +375,63 @@ func cmdServe(db *sql.DB, args []string) error {
 			}
 		}
 
+		// Créer la pièce
 		id, err := CreatePart(db, payload.Type, payload.Name, string(propsJSON), locationID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		// Gestion des photos uploadées (optionnel)
+		files := r.MultipartForm.File
+		if len(files) > 0 {
+			// Créer le dossier attachments s'il n'existe pas
+			attachmentsDir := "attachments"
+			if err := os.MkdirAll(attachmentsDir, 0755); err != nil {
+				log.Printf("Warning: cannot create attachments directory: %v", err)
+			} else {
+				// Sauvegarder chaque photo
+				for _, fileHeaders := range files {
+					for _, hdr := range fileHeaders {
+						if strings.HasPrefix(hdr.Filename, "photo_") {
+							file, err := hdr.Open()
+							if err != nil {
+								log.Printf("Warning: cannot open uploaded file %s: %v", hdr.Filename, err)
+								continue
+							}
+							defer file.Close()
+
+							// Générer un nom de fichier unique
+							ext := filepath.Ext(hdr.Filename)
+							if ext == "" {
+								ext = ".jpg" // extension par défaut
+							}
+							filename := fmt.Sprintf("%d_%s%s", id, hdr.Filename, ext)
+							filepath := filepath.Join(attachmentsDir, filename)
+
+							// Sauvegarder le fichier
+							dst, err := os.Create(filepath)
+							if err != nil {
+								log.Printf("Warning: cannot create file %s: %v", filepath, err)
+								continue
+							}
+							defer dst.Close()
+
+							if _, err := io.Copy(dst, file); err != nil {
+								log.Printf("Warning: cannot save file %s: %v", filepath, err)
+								continue
+							}
+
+							// Attacher le fichier à la pièce (utiliser la fonction existante)
+							if _, err := AttachFile(db, int(id), filepath); err != nil {
+								log.Printf("Warning: cannot attach file to part %d: %v", id, err)
+							}
+						}
+					}
+				}
+			}
+		}
+
 		writeJSON(w, http.StatusCreated, map[string]interface{}{
 			"id":   id,
 			"type": payload.Type,
@@ -307,12 +439,106 @@ func cmdServe(db *sql.DB, args []string) error {
 		})
 	})
 
-	// Localisations: GET /api/locations
+	// Localisations: GET /api/locations?search=...&id=...&path=...
 	mux.HandleFunc("/api/locations", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		// Recherche par ID
+		if idStr := r.URL.Query().Get("id"); idStr != "" {
+			id, err := strconv.Atoi(idStr)
+			if err != nil {
+				http.Error(w, "invalid id", http.StatusBadRequest)
+				return
+			}
+			loc, err := FindLocationByID(db, id)
+			if err != nil {
+				http.Error(w, "location not found", http.StatusNotFound)
+				return
+			}
+			path, _ := GetFullPath(db, loc.ID)
+			var pid *int
+			if loc.ParentID.Valid {
+				v := int(loc.ParentID.Int64)
+				pid = &v
+			}
+			resp := LocationAPIResponse{
+				ID:          loc.ID,
+				Name:        loc.Name,
+				ParentID:    pid,
+				LocType:     loc.LocType,
+				Description: loc.Description,
+				Path:        path,
+			}
+			writeJSON(w, http.StatusOK, []LocationAPIResponse{resp})
+			return
+		}
+
+		// Recherche par path
+		if pathStr := r.URL.Query().Get("path"); pathStr != "" {
+			locs, err := ListLocations(db)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			var resp []LocationAPIResponse
+			for _, l := range locs {
+				path, _ := GetFullPath(db, l.ID)
+				if strings.Contains(strings.ToLower(path), strings.ToLower(pathStr)) ||
+				   strings.Contains(strings.ToLower(l.Name), strings.ToLower(pathStr)) {
+					var pid *int
+					if l.ParentID.Valid {
+						v := int(l.ParentID.Int64)
+						pid = &v
+					}
+					resp = append(resp, LocationAPIResponse{
+						ID:          l.ID,
+						Name:        l.Name,
+						ParentID:    pid,
+						LocType:     l.LocType,
+						Description: l.Description,
+						Path:        path,
+					})
+				}
+			}
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
+		// Recherche textuelle
+		if searchStr := r.URL.Query().Get("search"); searchStr != "" {
+			locs, err := ListLocations(db)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			var resp []LocationAPIResponse
+			for _, l := range locs {
+				path, _ := GetFullPath(db, l.ID)
+				if strings.Contains(strings.ToLower(l.Name), strings.ToLower(searchStr)) ||
+				   strings.Contains(strings.ToLower(path), strings.ToLower(searchStr)) {
+					var pid *int
+					if l.ParentID.Valid {
+						v := int(l.ParentID.Int64)
+						pid = &v
+					}
+					resp = append(resp, LocationAPIResponse{
+						ID:          l.ID,
+						Name:        l.Name,
+						ParentID:    pid,
+						LocType:     l.LocType,
+						Description: l.Description,
+						Path:        path,
+					})
+				}
+			}
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
+		// Liste complète par défaut
 		locs, err := ListLocations(db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

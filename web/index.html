@@ -18,18 +18,19 @@
 <body>
   <div class="search-box">
     <h1>Recycle</h1>
-    <input 
-      type="text" 
-      name="q" 
+    <div style="margin-bottom: 16px;">
+      <a href="/add" style="background: #28a745; color: white; padding: 10px 16px; text-decoration: none; border-radius: 4px; margin-right: 8px;">➕ Ajouter une pièce</a>
+      <a href="/scan">📷 Scanner un QR code</a>
+    </div>
+    <input
+      type="text"
+      name="q"
       placeholder="Rechercher une pièce (nom, type, prop:val)"
       hx-get="/partials/search"
       hx-trigger="keyup changed delay:300ms"
       hx-target="#results"
       hx-include="[name='q']"
     />
-    <div style="margin-top:8px;">
-      <a href="/scan">📷 Scanner un QR code</a>
-    </div>
     <div id="results" class="results"></div>
   </div>
 </body>

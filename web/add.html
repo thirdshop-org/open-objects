@@ -1,0 +1,300 @@
+{{ define "add" }}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Ajouter une pièce - Recycle</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 24px; max-width: 800px; margin: auto; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; }
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;
+    }
+    .field-row { display: flex; gap: 8px; align-items: end; }
+    .field-row .field-input { flex: 1; }
+    .field-row .field-unit { width: 80px; }
+    button { padding: 10px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #218838; }
+    button:disabled { background: #6c757d; cursor: not-allowed; }
+    .btn-secondary { background: #6c757d; }
+    .btn-secondary:hover { background: #545b62; }
+    .photo-section { margin: 20px 0; padding: 16px; border: 2px dashed #ddd; border-radius: 8px; text-align: center; }
+    .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 12px; }
+    .photo-item { position: relative; }
+    .photo-item img { width: 100%; height: 120px; object-fit: cover; border-radius: 4px; }
+    .photo-item .remove-photo { position: absolute; top: 4px; right: 4px; background: red; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; }
+    .location-section { margin: 20px 0; }
+    .location-display { padding: 8px; background: #f8f9fa; border-radius: 4px; margin-top: 8px; }
+    .error { color: #dc3545; margin-top: 4px; font-size: 14px; }
+    .success { color: #28a745; margin-top: 4px; font-size: 14px; }
+    .dynamic-fields { margin-top: 16px; }
+    .field-group { margin-bottom: 12px; padding: 8px; border: 1px solid #eee; border-radius: 4px; }
+    .loading { opacity: 0.6; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <h1>Ajouter une nouvelle pièce</h1>
+
+  <form id="add-form" hx-post="/api/parts" hx-target="#result" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+    <!-- Type de pièce -->
+    <div class="form-group">
+      <label for="type">Type de pièce *</label>
+      <select name="type" id="type" required hx-get="/api/template-fields" hx-target="#dynamic-fields" hx-include="[name='type']">
+        <option value="">Sélectionner un type...</option>
+        <option value="moteur">Moteur électrique</option>
+        <option value="roulement">Roulement</option>
+        <option value="vis">Vis</option>
+      </select>
+    </div>
+
+    <!-- Nom de la pièce -->
+    <div class="form-group">
+      <label for="name">Nom de la pièce *</label>
+      <input type="text" name="name" id="name" required placeholder="Ex: Moteur 12V 50W">
+    </div>
+
+    <!-- Champs dynamiques selon le type -->
+    <div id="dynamic-fields" class="dynamic-fields"></div>
+
+    <!-- Photos (optionnel) -->
+    <div class="photo-section">
+      <div>
+        <input type="file" id="photo-input" accept="image/*" multiple style="display: none;" onchange="handlePhotoSelect(event)">
+        <button type="button" onclick="document.getElementById('photo-input').click()">📷 Ajouter des photos</button>
+        <span style="margin-left: 12px; color: #666; font-size: 14px;">Optionnel</span>
+      </div>
+      <div id="photo-grid" class="photo-grid"></div>
+    </div>
+
+    <!-- Localisation -->
+    <div class="location-section">
+      <label>Localisation de stockage</label>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <input type="text" id="location-search" placeholder="Rechercher une localisation..." style="flex: 1;">
+        <button type="button" onclick="openLocationScanner()">📷 Scanner QR</button>
+        <button type="button" onclick="searchLocation()">🔍 Rechercher</button>
+      </div>
+      <input type="hidden" name="loc" id="selected-location">
+      <div id="location-display" class="location-display" style="display: none;"></div>
+    </div>
+
+    <!-- Boutons -->
+    <div style="margin-top: 24px;">
+      <button type="submit">Ajouter la pièce</button>
+      <button type="button" class="btn-secondary" onclick="window.history.back()">Annuler</button>
+    </div>
+
+    <!-- Résultat -->
+    <div id="result"></div>
+  </form>
+
+  <!-- Scanner QR modal (caché par défaut) -->
+  <div id="scanner-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%;">
+      <h3>Scanner un QR code de localisation</h3>
+      <video id="scanner-video" style="width: 100%; border-radius: 4px;"></video>
+      <div style="margin-top: 12px;">
+        <button onclick="closeScanner()">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import QrScanner from '/static/qr-scanner.min.js';
+    QrScanner.WORKER_PATH = '/static/qr-scanner-worker.min.js';
+
+    let scanner = null;
+    let photos = [];
+
+    // Gestion des photos
+    window.handlePhotoSelect = function(event) {
+      const files = Array.from(event.target.files);
+      files.forEach(file => {
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            photos.push({ file, dataUrl: e.target.result });
+            updatePhotoGrid();
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    };
+
+    function updatePhotoGrid() {
+      const grid = document.getElementById('photo-grid');
+      grid.innerHTML = '';
+      photos.forEach((photo, index) => {
+        const item = document.createElement('div');
+        item.className = 'photo-item';
+        item.innerHTML = `
+          <img src="${photo.dataUrl}" alt="Photo ${index + 1}">
+          <button type="button" class="remove-photo" onclick="removePhoto(${index})">×</button>
+        `;
+        grid.appendChild(item);
+      });
+    }
+
+    window.removePhoto = function(index) {
+      photos.splice(index, 1);
+      updatePhotoGrid();
+    };
+
+    // Gestion de la localisation
+    window.searchLocation = function() {
+      const query = document.getElementById('location-search').value.trim();
+      if (!query) return;
+
+      fetch(`/api/locations?search=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.length > 0) {
+            selectLocation(data[0]);
+          } else {
+            alert('Aucune localisation trouvée');
+          }
+        })
+        .catch(error => console.error('Erreur:', error));
+    };
+
+    window.openLocationScanner = function() {
+      document.getElementById('scanner-modal').style.display = 'block';
+      startScanner();
+    };
+
+    window.closeScanner = function() {
+      document.getElementById('scanner-modal').style.display = 'none';
+      if (scanner) {
+        scanner.stop();
+        scanner = null;
+      }
+    };
+
+    function startScanner() {
+      const video = document.getElementById('scanner-video');
+
+      scanner = new QrScanner(
+        video,
+        result => {
+          const parsed = extractLocationFromQR(result);
+          if (parsed.path || parsed.id) {
+            closeScanner();
+            if (parsed.path) {
+              // Recherche par path
+              fetch(`/api/locations?path=${encodeURIComponent(parsed.path)}`)
+                .then(response => response.json())
+                .then(data => {
+                  if (data.length > 0) {
+                    selectLocation(data[0]);
+                  }
+                });
+            } else if (parsed.id) {
+              // Recherche par ID
+              fetch(`/api/locations?id=${parsed.id}`)
+                .then(response => response.json())
+                .then(data => {
+                  if (data.length > 0) {
+                    selectLocation(data[0]);
+                  }
+                });
+            }
+          }
+        },
+        { highlightScanRegion: true }
+      );
+
+      scanner.start();
+    }
+
+    function extractLocationFromQR(text) {
+      let m = text.match(/^LOC-(\d+)$/i);
+      if (m) return { id: m[1] };
+      m = text.match(/webapp:\/\/loc\?p=([\w\-\._~\/]+)/i);
+      if (m) return { path: decodeURIComponent(m[1]) };
+      m = text.match(/\/location\?path=([\w\-\._~%\/]+)/i);
+      if (m) return { path: decodeURIComponent(m[1]) };
+      return { path: text };
+    }
+
+    function selectLocation(location) {
+      document.getElementById('selected-location').value = location.Path || location.ID;
+      document.getElementById('location-display').style.display = 'block';
+      document.getElementById('location-display').innerHTML = `
+        <strong>📍 ${location.Name}</strong><br>
+        ${location.Path || `ID: ${location.ID}`}
+      `;
+    }
+
+    // Gestion du formulaire
+    document.getElementById('add-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      // Collecter les données du formulaire
+      const formData = new FormData();
+      formData.append('type', document.getElementById('type').value);
+      formData.append('name', document.getElementById('name').value);
+      formData.append('loc', document.getElementById('selected-location').value);
+
+      // Collecter les propriétés dynamiques
+      const props = {};
+      document.querySelectorAll('#dynamic-fields input[name]').forEach(input => {
+        if (input.value.trim()) {
+          props[input.name] = input.value;
+        }
+      });
+      formData.append('props', JSON.stringify(props));
+
+      // Ajouter les photos
+      photos.forEach((photo, index) => {
+        formData.append(`photo_${index}`, photo.file);
+      });
+
+      // Soumettre
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Ajout en cours...';
+
+      fetch('/api/parts', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.id) {
+          document.getElementById('result').innerHTML = `
+            <div class="success">Pièce ajoutée avec succès ! ID: ${data.id}</div>
+          `;
+          setTimeout(() => {
+            window.location.href = `/view/${data.id}`;
+          }, 2000);
+        } else {
+          throw new Error(data.error || 'Erreur inconnue');
+        }
+      })
+      .catch(error => {
+        document.getElementById('result').innerHTML = `
+          <div class="error">Erreur: ${error.message}</div>
+        `;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Ajouter la pièce';
+      });
+    });
+
+    // Recherche de localisation en temps réel
+    document.getElementById('location-search').addEventListener('input', function(e) {
+      const query = e.target.value.trim();
+      if (query.length < 2) return;
+
+      fetch(`/api/locations?search=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+          // Afficher les suggestions (implémentation simplifiée)
+          console.log('Suggestions:', data);
+        });
+    });
+  </script>
+</body>
+</html>
+{{ end }}

@@ -14,6 +14,7 @@ var (
 	tplSearch   *template.Template
 	tplScan     *template.Template
 	tplLocation *template.Template
+	tplAdd      *template.Template
 )
 
 func mustLoadWebTemplates() {
@@ -22,4 +23,5 @@ func mustLoadWebTemplates() {
 	tplSearch = template.Must(template.ParseFS(webFS, "web/partials_search.html"))
 	tplScan = template.Must(template.ParseFS(webFS, "web/scan.html"))
 	tplLocation = template.Must(template.ParseFS(webFS, "web/location.html"))
+	tplAdd = template.Must(template.ParseFS(webFS, "web/add.html"))
 }
