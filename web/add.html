@@ -40,9 +40,9 @@
   <form id="add-form" hx-post="/api/parts" hx-target="#result" hx-swap="innerHTML" hx-encoding="multipart/form-data">
     <!-- Type de pièce -->
     <div class="form-group">
-      <label for="type">Type de pièce *</label>
-      <select name="type" id="type" required hx-get="/api/template-fields" hx-target="#dynamic-fields" hx-include="[name='type']">
-        <option value="">Sélectionner un type...</option>
+      <label for="type">Type de pièce</label>
+      <select name="type" id="type" hx-get="/api/template-fields" hx-target="#dynamic-fields" hx-include="[name='type']">
+        <option value="">Aucun type spécifique</option>
         <option value="moteur">Moteur électrique</option>
         <option value="roulement">Roulement</option>
         <option value="vis">Vis</option>
