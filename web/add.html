@@ -219,11 +219,11 @@
     }
 
     function selectLocation(location) {
-      document.getElementById('selected-location').value = location.Path || location.ID;
+      document.getElementById('selected-location').value = location.path || location.id;
       document.getElementById('location-display').style.display = 'block';
       document.getElementById('location-display').innerHTML = `
-        <strong>📍 ${location.Name}</strong><br>
-        ${location.Path || `ID: ${location.ID}`}
+        <strong>📍 ${location.name}</strong><br>
+        ${location.path || `ID: ${location.id}`}
       `;
     }
 
