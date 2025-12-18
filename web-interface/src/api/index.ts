@@ -20,93 +20,96 @@ export interface LocationAPIResponse {
   path: string;
 }
 
-export interface SearchResult {
-  parts: PartAPIResponse[];
-  total: number;
-}
 
-// Définition des fonctions API avec tuples pour les types de retour
+// Types pour les réponses API avec union discriminée
+// Pattern: [error, null] | [null, T]
+// Exemple d'utilisation:
+// const [error, result] = await api.search("query")
+// if (error) { /* gérer l'erreur */ } else { /* utiliser result */ }
+type APIResult<T> = [error: string, result: null] | [error: null, result: T]
+
+// Définition des fonctions API avec tuples discriminés
 export const api = {
-  // Health check - retourne [success: boolean, error?: string]
-  health: async (): Promise<[boolean, string?]> => {
+  // Health check - retourne [null, boolean] | [string, null]
+  health: async (): Promise<APIResult<boolean>> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/health`);
       if (response.ok) {
-        return [true];
+        return [null, true];
       }
-      return [false, `HTTP ${response.status}`];
+      return [`HTTP ${response.status}`, null];
     } catch (error) {
-      return [false, error instanceof Error ? error.message : 'Unknown error'];
+      return [error instanceof Error ? error.message : 'Unknown error', null];
     }
   },
 
-  // Recherche de pièces - retourne [résultats: SearchResult | null, error?: string]
-  search: async (query: string): Promise<[SearchResult | null, string?]> => {
+  // Recherche de pièces - retourne [null, PartAPIResponse[]] | [string, null]
+  search: async (query: string): Promise<APIResult<PartAPIResponse[]>> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/search?q=${encodeURIComponent(query)}`);
       if (response.ok) {
         const data = await response.json();
-        return [data];
+        return [null, data];
       }
-      return [null, `HTTP ${response.status}`];
+      return [`HTTP ${response.status}`, null];
     } catch (error) {
-      return [null, error instanceof Error ? error.message : 'Unknown error'];
+      return [error instanceof Error ? error.message : 'Unknown error', null];
     }
   },
 
-  // Récupération de toutes les pièces - retourne [pièces: PartAPIResponse[] | null, error?: string]
-  getParts: async (): Promise<[PartAPIResponse[] | null, string?]> => {
+  // Récupération de toutes les pièces - retourne [null, PartAPIResponse[]] | [string, null]
+  getParts: async (): Promise<APIResult<PartAPIResponse[]>> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/search`);
       if (response.ok) {
         const data = await response.json();
-        return [data.parts || []];
+        return [null, data];
       }
-      return [null, `HTTP ${response.status}`];
+      return [`HTTP ${response.status}`, null];
     } catch (error) {
-      return [null, error instanceof Error ? error.message : 'Unknown error'];
+      return [error instanceof Error ? error.message : 'Unknown error', null];
     }
   },
 
-  // Récupération des localisations - retourne [localisations: LocationAPIResponse[] | null, error?: string]
-  getLocations: async (): Promise<[LocationAPIResponse[] | null, string?]> => {
+  // Récupération des localisations - retourne [null, LocationAPIResponse[]] | [string, null]
+  getLocations: async (): Promise<APIResult<LocationAPIResponse[]>> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/locations`);
       if (response.ok) {
         const data = await response.json();
-        return [data];
+        return [null, data];
       }
-      return [null, `HTTP ${response.status}`];
+      return [`HTTP ${response.status}`, null];
     } catch (error) {
-      return [null, error instanceof Error ? error.message : 'Unknown error'];
+      return [error instanceof Error ? error.message : 'Unknown error', null];
     }
   },
 
-  // Recherche fédérée - retourne [résultats: SearchResult | null, error?: string]
-  federatedSearch: async (query: string): Promise<[SearchResult | null, string?]> => {
+  // Recherche fédérée - retourne [null, PartAPIResponse[]] | [string, null]
+  federatedSearch: async (query: string): Promise<APIResult<PartAPIResponse[]>> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/federated/search?q=${encodeURIComponent(query)}`);
       if (response.ok) {
         const data = await response.json();
-        return [data];
+        return [null, data];
       }
-      return [null, `HTTP ${response.status}`];
+      return [`HTTP ${response.status}`, null];
     } catch (error) {
-      return [null, error instanceof Error ? error.message : 'Unknown error'];
+      return [error instanceof Error ? error.message : 'Unknown error', null];
     }
   },
 
-  // Récupération des champs de template - retourne [champs: any | null, error?: string]
-  getTemplateFields: async (): Promise<[any | null, string?]> => {
+  // Récupération des champs de template - retourne [null, any] | [string, null]
+  getTemplateFields: async (): Promise<APIResult<any>> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/template-fields`);
       if (response.ok) {
         const data = await response.json();
-        return [data];
+        return [null, data];
       }
-      return [null, `HTTP ${response.status}`];
+      return [`HTTP ${response.status}`, null];
     } catch (error) {
-      return [null, error instanceof Error ? error.message : 'Unknown error'];
+      return [error instanceof Error ? error.message : 'Unknown error', null];
     }
   },
 };

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Badge } from "./ui/badge"
 import { Spinner } from "./ui/spinner"
 import { Search, Package, Plus, QrCode, BarChart3, Tag, MapPin } from "lucide-react"
-import { api, type PartAPIResponse, type SearchResult } from "../api"
+import { api, type PartAPIResponse } from "../api"
 
 export default function SearchInterface() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -24,12 +24,12 @@ export default function SearchInterface() {
 
     setIsSearching(true)
     try {
-      const [results, error] = await api.search(query)
+      const [error, results] = await api.search(query)
       if (error) {
         console.error("Search error:", error)
         setSearchResults([])
       } else {
-        setSearchResults(results?.parts || [])
+        setSearchResults(results || [])
       }
     } catch (error) {
       console.error("Search failed:", error)
@@ -58,7 +58,7 @@ export default function SearchInterface() {
   const loadAllParts = async () => {
     setIsLoadingParts(true)
     try {
-      const [parts, error] = await api.getParts()
+      const [error, parts] = await api.getParts()
       if (error) {
         console.error("Load parts error:", error)
         setAllParts([])
@@ -76,8 +76,8 @@ export default function SearchInterface() {
   // Vérifier la santé de l'API au montage
   useEffect(() => {
     const checkHealth = async () => {
-      const [healthy, error] = await api.health()
-      if (!healthy) {
+      const [error, healthy] = await api.health()
+      if (error) {
         console.warn("API health check failed:", error)
       }
     }
