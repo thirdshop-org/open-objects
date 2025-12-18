@@ -1,0 +1,32 @@
+{
+  "name": "open-objects",
+  "version": "1.0.0",
+  "description": "Gestionnaire de pièces techniques avec interface web",
+  "scripts": {
+    "dev": "$(which air || echo \"$HOME/go/bin/air\") -c .air.toml",
+    "build": "go build -o open-objects .",
+    "serve": "go run . serve",
+    "serve:prod": "./open-objects serve",
+    "clean": "rm -rf tmp/ *.log",
+    "test": "go test ./...",
+    "docker:build": "docker build -t open-objects .",
+    "docker:run": "docker run -p 8080:8080 open-objects"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "keywords": [
+    "golang",
+    "inventory",
+    "parts",
+    "web",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT"
+}

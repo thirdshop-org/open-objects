@@ -81,6 +81,17 @@ func cmdServe(db *sql.DB, args []string) error {
 		w.Write(data)
 	})
 
+	// favicon.ico et source maps - retourne 404 silencieusement
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	mux.HandleFunc("/static/qr-scanner.min.js.map", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	mux.HandleFunc("/static/qr-scanner-worker.min.js.map", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
 	// page d'accueil
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
