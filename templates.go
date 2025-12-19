@@ -149,3 +149,27 @@ func GetFieldDomain(typeName, fieldName string) UnitDomain {
 		return DomainNone
 	}
 }
+
+// PartTypeInfo représente les informations d'un type de pièce
+type PartTypeInfo struct {
+	Value       string `json:"value"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// GetAvailableTypes retourne la liste de tous les types de pièces disponibles
+func GetAvailableTypes() []PartTypeInfo {
+	types := []PartTypeInfo{
+		{Value: "", Label: "Autre"},
+	}
+
+	for name, template := range Templates {
+		types = append(types, PartTypeInfo{
+			Value:       name,
+			Label:       strings.Title(name), // Capitalise la première lettre
+			Description: template.Description,
+		})
+	}
+
+	return types
+}

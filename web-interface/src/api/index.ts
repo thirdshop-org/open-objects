@@ -40,6 +40,12 @@ export interface AddPartResponse {
   error?: string;
 }
 
+export interface PartTypeInfo {
+  value: string;
+  label: string;
+  description?: string;
+}
+
 
 // Types pour les réponses API avec union discriminée
 // Pattern: [error, null] | [null, T]
@@ -135,12 +141,31 @@ export const api = {
   },
 
   // Récupération des champs de template - retourne [null, any] | [string, null]
-  getTemplateFields: async (): Promise<APIResult<any>> => {
+  getTemplateFields: async (type?: string): Promise<APIResult<any>> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/template-fields`);
+      let url = `${API_BASE_URL}/api/template-fields`;
+      if (type) {
+        url += `?type=${encodeURIComponent(type)}`;
+      }
+
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         return [null, data];
+      }
+      return [`HTTP ${response.status}`, null];
+    } catch (error) {
+      return [error instanceof Error ? error.message : 'Unknown error', null];
+    }
+  },
+
+  // Récupération des types de pièces disponibles - retourne [null, PartTypeInfo[]] | [string, null]
+  getPartTypes: async (): Promise<APIResult<PartTypeInfo[]>> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/part-types`);
+      if (response.ok) {
+        const data = await response.json();
+        return [null, data.types || []];
       }
       return [`HTTP ${response.status}`, null];
     } catch (error) {

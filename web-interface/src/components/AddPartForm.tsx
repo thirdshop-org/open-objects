@@ -35,19 +35,43 @@ export default function AddPartForm() {
   const [locationSuggestions, setLocationSuggestions] = useState<any[]>([])
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false)
   const [locationSearchTimeout, setLocationSearchTimeout] = useState<NodeJS.Timeout | null>(null)
+  const [availableTypes, setAvailableTypes] = useState<{ value: string; label: string; description?: string }[]>([])
+  const [typesLoading, setTypesLoading] = useState(true)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Types disponibles
-  const availableTypes = [
-    { value: "moteur", label: "Moteur" },
-    { value: "roulement", label: "Roulement" },
-    { value: "vis", label: "Vis" },
-    { value: "capteur", label: "Capteur" },
-    { value: "resistance", label: "Résistance" },
-    { value: "condensateur", label: "Condensateur" },
-    { value: "", label: "Autre" },
-  ]
+  // Charger les types disponibles au montage du composant
+  useEffect(() => {
+    const loadAvailableTypes = async () => {
+      try {
+        const [error, types] = await api.getPartTypes()
+        if (error) {
+          console.error("Erreur chargement types:", error)
+          // Fallback avec des types par défaut si l'API échoue
+          setAvailableTypes([
+            { value: "", label: "Autre" },
+            { value: "moteur", label: "Moteur" },
+            { value: "roulement", label: "Roulement" },
+            { value: "vis", label: "Vis" },
+          ])
+        } else {
+          setAvailableTypes(types || [])
+        }
+      } catch (error) {
+        console.error("Erreur chargement types:", error)
+        setAvailableTypes([
+          { value: "", label: "Autre" },
+          { value: "moteur", label: "Moteur" },
+          { value: "roulement", label: "Roulement" },
+          { value: "vis", label: "Vis" },
+        ])
+      } finally {
+        setTypesLoading(false)
+      }
+    }
+
+    loadAvailableTypes()
+  }, [])
 
   // Charger le template quand le type change
   useEffect(() => {
@@ -61,16 +85,16 @@ export default function AddPartForm() {
 
   const loadTemplate = async (type: string) => {
     try {
-      const [error, templateData] = await api.getTemplateFields()
+      const [error, templateData] = await api.getTemplateFields(type)
       if (error) {
         console.error("Erreur chargement template:", error)
         setTemplate(null)
         return
       }
 
-      // Trouver le template pour ce type
-      if (templateData && templateData[type]) {
-        setTemplate({ fields: templateData[type] })
+      // Les données retournées contiennent directement les champs pour ce type
+      if (templateData && templateData.fields) {
+        setTemplate({ fields: templateData.fields })
       } else {
         setTemplate(null)
       }
@@ -104,19 +128,18 @@ export default function AddPartForm() {
 
     const timeout = setTimeout(async () => {
       try {
-        const [error, locations] = await api.getLocations()
+        // Utiliser la recherche côté serveur avec les paramètres
+        const [error, locations] = await api.getLocations({
+          search: query,
+          limit: 10
+        })
+
         if (error) {
           console.error("Erreur recherche localisations:", error)
           return
         }
 
-        // Filtrer les localisations qui correspondent à la recherche
-        const filtered = (locations || []).filter((loc: any) =>
-          loc.name.toLowerCase().includes(query.toLowerCase()) ||
-          (loc.path && loc.path.toLowerCase().includes(query.toLowerCase()))
-        )
-
-        setLocationSuggestions(filtered.slice(0, 10)) // Limiter à 10 suggestions
+        setLocationSuggestions(locations || [])
         setShowLocationSuggestions(true)
       } catch (error) {
         console.error("Erreur recherche localisations:", error)
@@ -174,13 +197,7 @@ export default function AddPartForm() {
     setSubmitResult(null)
 
     try {
-      // Préparer les données du formulaire
-      const formDataToSend = new FormData()
-      formDataToSend.append('type', formData.type)
-      formDataToSend.append('name', formData.name)
-      formDataToSend.append('loc', formData.location)
-
-      // Ajouter les propriétés dynamiques
+      // Préparer les propriétés dynamiques
       const props: Record<string, any> = {}
       if (template?.fields) {
         template.fields.forEach(field => {
@@ -190,22 +207,23 @@ export default function AddPartForm() {
           }
         })
       }
-      formDataToSend.append('props', JSON.stringify(props))
 
-      // Ajouter les photos
-      photos.forEach((photo, index) => {
-        formDataToSend.append(`photo_${index}`, photo)
-      })
+      // Préparer les données pour l'API
+      const partData = {
+        type: formData.type || undefined,
+        name: formData.name,
+        loc: formData.location || undefined,
+        props: Object.keys(props).length > 0 ? props : undefined,
+      }
 
-      // Envoyer à l'API
-      const response = await fetch('http://127.0.0.1:8080/api/parts', {
-        method: 'POST',
-        body: formDataToSend,
-      })
+      // Utiliser l'API centralisée
+      const [error, result] = await api.addPart(partData, photos.length > 0 ? photos : undefined)
 
-      const result = await response.json()
+      if (error) {
+        throw new Error(error)
+      }
 
-      if (response.ok && result.id) {
+      if (result && result.id) {
         setSubmitResult({
           success: true,
           message: `Pièce ajoutée avec succès ! ID: ${result.id}`
@@ -216,7 +234,7 @@ export default function AddPartForm() {
           window.location.href = `/view?id=${result.id}`
         }, 2000)
       } else {
-        throw new Error(result.error || 'Erreur lors de l\'ajout')
+        throw new Error(result?.error || 'Erreur lors de l\'ajout')
       }
 
     } catch (error) {

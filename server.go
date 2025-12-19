@@ -248,6 +248,17 @@ func cmdServe(db *sql.DB, args []string) error {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"fields": fields})
 	})
 
+	// Récupération des types de pièces disponibles: /api/part-types
+	mux.HandleFunc("/api/part-types", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		types := GetAvailableTypes()
+		writeJSON(w, http.StatusOK, map[string]interface{}{"types": types})
+	})
+
 	// Recherche: /api/search?type=...&name=...&prop=...
 	mux.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
