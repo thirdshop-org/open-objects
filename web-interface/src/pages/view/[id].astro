@@ -1,0 +1,11 @@
+---
+import Layout from "../../layouts/default.astro"
+import ViewPartDetail from "../../components/ViewPartDetail.tsx"
+
+// Pour le développement, utilisons une approche différente
+// On récupère l'ID depuis l'URL côté client
+---
+
+<Layout title="Détails de la pièce - Open Objects">
+  <ViewPartDetail client:load />
+</Layout>

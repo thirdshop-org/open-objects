@@ -20,6 +20,26 @@ export interface LocationAPIResponse {
   path: string;
 }
 
+export interface LocationSearchParams {
+  search?: string;
+  limit?: number;
+  path?: string;
+  id?: string;
+}
+
+export interface AddPartRequest {
+  type?: string;
+  name: string;
+  loc?: string;
+  props?: any;
+  // Les photos sont envoyées comme des fichiers séparés
+}
+
+export interface AddPartResponse {
+  id?: number;
+  error?: string;
+}
+
 
 // Types pour les réponses API avec union discriminée
 // Pattern: [error, null] | [null, T]
@@ -72,9 +92,24 @@ export const api = {
   },
 
   // Récupération des localisations - retourne [null, LocationAPIResponse[]] | [string, null]
-  getLocations: async (): Promise<APIResult<LocationAPIResponse[]>> => {
+  getLocations: async (params?: LocationSearchParams): Promise<APIResult<LocationAPIResponse[]>> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/locations`);
+      let url = `${API_BASE_URL}/api/locations`;
+
+      if (params) {
+        const searchParams = new URLSearchParams();
+        if (params.search) searchParams.append('search', params.search);
+        if (params.limit) searchParams.append('limit', params.limit.toString());
+        if (params.path) searchParams.append('path', params.path);
+        if (params.id) searchParams.append('id', params.id);
+
+        const queryString = searchParams.toString();
+        if (queryString) {
+          url += `?${queryString}`;
+        }
+      }
+
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         return [null, data];
@@ -106,6 +141,52 @@ export const api = {
       if (response.ok) {
         const data = await response.json();
         return [null, data];
+      }
+      return [`HTTP ${response.status}`, null];
+    } catch (error) {
+      return [error instanceof Error ? error.message : 'Unknown error', null];
+    }
+  },
+
+  // Ajout d'une pièce - retourne [null, AddPartResponse] | [string, null]
+  addPart: async (partData: AddPartRequest, photos?: File[]): Promise<APIResult<AddPartResponse>> => {
+    try {
+      const formData = new FormData();
+
+      if (partData.type) formData.append('type', partData.type);
+      formData.append('name', partData.name);
+      if (partData.loc) formData.append('loc', partData.loc);
+      if (partData.props) formData.append('props', JSON.stringify(partData.props));
+
+      // Ajouter les photos
+      if (photos) {
+        photos.forEach((photo, index) => {
+          formData.append(`photo_${index}`, photo);
+        });
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/parts`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return [null, data];
+      }
+      return [`HTTP ${response.status}`, null];
+    } catch (error) {
+      return [error instanceof Error ? error.message : 'Unknown error', null];
+    }
+  },
+
+  // Recherche de pièces (partial HTML) - retourne [null, string] | [string, null]
+  searchPartsPartial: async (query: string): Promise<APIResult<string>> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/partials/search?q=${encodeURIComponent(query)}`);
+      if (response.ok) {
+        const html = await response.text();
+        return [null, html];
       }
       return [`HTTP ${response.status}`, null];
     } catch (error) {
