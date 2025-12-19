@@ -3,7 +3,7 @@ import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { Badge } from "./ui/badge"
-import { Plus, X, Upload, MapPin, Camera, Package, Loader2 } from "lucide-react"
+import { Plus, X, Upload, MapPin, Camera, Package, Loader2, ChevronLeft, Check } from "lucide-react"
 import { api } from "../api"
 
 interface TemplateField {
@@ -18,7 +18,9 @@ interface TemplateField {
 interface TemplateData {
   fields: TemplateField[]
 }
-export const prerender = false;
+
+export const prerender = false
+
 export default function AddPartForm() {
   const [formData, setFormData] = useState({
     type: "",
@@ -39,15 +41,14 @@ export default function AddPartForm() {
   const [typesLoading, setTypesLoading] = useState(true)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Charger les types disponibles au montage du composant
   useEffect(() => {
     const loadAvailableTypes = async () => {
       try {
         const [error, types] = await api.getPartTypes()
         if (error) {
           console.error("Erreur chargement types:", error)
-          // Fallback avec des types par défaut si l'API échoue
           setAvailableTypes([
             { value: "", label: "Autre" },
             { value: "moteur", label: "Moteur" },
@@ -73,7 +74,6 @@ export default function AddPartForm() {
     loadAvailableTypes()
   }, [])
 
-  // Charger le template quand le type change
   useEffect(() => {
     if (formData.type && formData.type !== "") {
       loadTemplate(formData.type)
@@ -92,7 +92,6 @@ export default function AddPartForm() {
         return
       }
 
-      // Les données retournées contiennent directement les champs pour ce type
       if (templateData && templateData.fields) {
         setTemplate({ fields: templateData.fields })
       } else {
@@ -104,17 +103,14 @@ export default function AddPartForm() {
     }
   }
 
-  // Gestionnaire de changement des champs principaux
   const handleFieldChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  // Gestionnaire des champs dynamiques
   const handleDynamicFieldChange = (fieldName: string, value: string) => {
     setDynamicFields(prev => ({ ...prev, [fieldName]: value }))
   }
 
-  // Recherche de localisations
   const handleLocationSearch = (query: string) => {
     if (locationSearchTimeout) {
       clearTimeout(locationSearchTimeout)
@@ -128,7 +124,6 @@ export default function AddPartForm() {
 
     const timeout = setTimeout(async () => {
       try {
-        // Utiliser la recherche côté serveur avec les paramètres
         const [error, locations] = await api.getLocations({
           search: query,
           limit: 10
@@ -149,7 +144,6 @@ export default function AddPartForm() {
     setLocationSearchTimeout(timeout)
   }
 
-  // Sélection d'une localisation
   const selectLocation = (location: any) => {
     setFormData(prev => ({
       ...prev,
@@ -160,11 +154,10 @@ export default function AddPartForm() {
     setShowLocationSuggestions(false)
   }
 
-  // Gestionnaire d'ajout de photos
   const handlePhotoAdd = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     const validFiles = files.filter(file =>
-      file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024 // 10MB max
+      file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024
     )
 
     if (validFiles.length + photos.length > 10) {
@@ -173,18 +166,18 @@ export default function AddPartForm() {
     }
 
     setPhotos(prev => [...prev, ...validFiles])
-    // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = ""
+    }
   }
 
-  // Suppression d'une photo
   const removePhoto = (index: number) => {
     setPhotos(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Soumission du formulaire
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -197,7 +190,6 @@ export default function AddPartForm() {
     setSubmitResult(null)
 
     try {
-      // Préparer les propriétés dynamiques
       const props: Record<string, any> = {}
       if (template?.fields) {
         template.fields.forEach(field => {
@@ -208,7 +200,6 @@ export default function AddPartForm() {
         })
       }
 
-      // Préparer les données pour l'API
       const partData = {
         type: formData.type || undefined,
         name: formData.name,
@@ -216,7 +207,6 @@ export default function AddPartForm() {
         props: Object.keys(props).length > 0 ? props : undefined,
       }
 
-      // Utiliser l'API centralisée
       const [error, result] = await api.addPart(partData, photos.length > 0 ? photos : undefined)
 
       if (error) {
@@ -226,10 +216,9 @@ export default function AddPartForm() {
       if (result && result.id) {
         setSubmitResult({
           success: true,
-          message: `Pièce ajoutée avec succès ! ID: ${result.id}`
+          message: `Pièce ajoutée avec succès !`
         })
 
-        // Redirection après 2 secondes
         setTimeout(() => {
           window.location.href = `/view?id=${result.id}`
         }, 2000)
@@ -249,261 +238,278 @@ export default function AddPartForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <Plus className="h-12 w-12 text-primary" />
-            <h1 className="text-4xl font-bold">Ajouter une pièce</h1>
+    <div className="min-h-screen bg-background pb-24">
+      {/* Header fixe */}
+      <div className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
+        <div className="flex items-center gap-3 px-4 py-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => window.history.back()}
+            className="shrink-0"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </Button>
+          <div className="flex items-center gap-2 min-w-0">
+            <Plus className="h-6 w-6 text-primary shrink-0" />
+            <h1 className="text-xl font-bold truncate">Ajouter une pièce</h1>
           </div>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Ajoutez une nouvelle pièce à votre collection avec photos et propriétés détaillées
-          </p>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="px-4 py-6 space-y-6">
+        {/* Informations de base */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Informations de base
+          </h2>
+
+          {/* Type */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Type de pièce <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={formData.type}
+              onChange={(e) => handleFieldChange('type', e.target.value)}
+              className="w-full h-12 px-4 border border-input rounded-lg bg-background text-base"
+              required
+            >
+              <option value="">Sélectionner un type</option>
+              {availableTypes.map(type => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Nom */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Nom de la pièce <span className="text-destructive">*</span>
+            </label>
+            <Input
+              type="text"
+              value={formData.name}
+              onChange={(e) => handleFieldChange('name', e.target.value)}
+              placeholder="Ex: Moteur 12V, Roulement SKF..."
+              className="h-12 text-base"
+              required
+            />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Informations de base */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Informations de base
-              </CardTitle>
-              <CardDescription>
-                Les informations essentielles de votre pièce
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Type */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Type de pièce *</label>
-                <select
-                  value={formData.type}
-                  onChange={(e) => handleFieldChange('type', e.target.value)}
-                  className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                  required
-                >
-                  <option value="">Sélectionner un type</option>
-                  {availableTypes.map(type => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        {/* Propriétés dynamiques */}
+        {template?.fields && template.fields.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">Propriétés spécifiques</h2>
+            <p className="text-sm text-muted-foreground">
+              Pour "{availableTypes.find(t => t.value === formData.type)?.label}"
+            </p>
 
-              {/* Nom */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Nom de la pièce *</label>
-                <Input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => handleFieldChange('name', e.target.value)}
-                  placeholder="Ex: Moteur 12V, Roulement SKF 6204..."
-                  required
-                />
-              </div>
-            </CardContent>
-          </Card>
+            {template.fields.map(field => (
+              <div key={field.name}>
+                <label className="block text-sm font-medium mb-2">
+                  {field.label || field.name}
+                  {field.unit && <span className="text-muted-foreground"> ({field.unit})</span>}
+                  {field.required && <span className="text-destructive"> *</span>}
+                </label>
 
-          {/* Propriétés dynamiques */}
-          {template?.fields && template.fields.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Propriétés spécifiques</CardTitle>
-                <CardDescription>
-                  Propriétés spécifiques au type "{availableTypes.find(t => t.value === formData.type)?.label}"
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {template.fields.map(field => (
-                  <div key={field.name}>
-                    <label className="block text-sm font-medium mb-2">
-                      {field.label || field.name}
-                      {field.unit && <span className="text-muted-foreground"> ({field.unit})</span>}
-                      {field.required && <span className="text-destructive">*</span>}
-                    </label>
-
-                    {field.type === 'select' && field.options ? (
-                      <select
-                        value={dynamicFields[field.name] || ''}
-                        onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
-                        className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                        required={field.required}
-                      >
-                        <option value="">Sélectionner...</option>
-                        {field.options.map(option => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        type={field.type === 'number' ? 'number' : 'text'}
-                        value={dynamicFields[field.name] || ''}
-                        onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
-                        placeholder={field.label || field.name}
-                        required={field.required}
-                      />
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Localisation */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Localisation
-              </CardTitle>
-              <CardDescription>
-                Où se trouve cette pièce dans votre atelier ?
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative">
-                <label className="block text-sm font-medium mb-2">Rechercher une localisation</label>
-                <Input
-                  type="text"
-                  placeholder="Tapez pour rechercher une localisation..."
-                  onChange={(e) => handleLocationSearch(e.target.value)}
-                />
-
-                {/* Suggestions */}
-                {showLocationSuggestions && locationSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {locationSuggestions.map((location) => (
-                      <div
-                        key={location.id}
-                        className="px-4 py-2 hover:bg-accent cursor-pointer"
-                        onClick={() => selectLocation(location)}
-                      >
-                        <div className="font-medium">{location.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {location.path || `ID: ${location.id}`}
-                        </div>
-                      </div>
+                {field.type === 'select' && field.options ? (
+                  <select
+                    value={dynamicFields[field.name] || ''}
+                    onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
+                    className="w-full h-12 px-4 border border-input rounded-lg bg-background text-base"
+                    required={field.required}
+                  >
+                    <option value="">Sélectionner...</option>
+                    {field.options.map(option => (
+                      <option key={option} value={option}>{option}</option>
                     ))}
-                  </div>
+                  </select>
+                ) : (
+                  <Input
+                    type={field.type === 'number' ? 'number' : 'text'}
+                    value={dynamicFields[field.name] || ''}
+                    onChange={(e) => handleDynamicFieldChange(field.name, e.target.value)}
+                    placeholder={field.label || field.name}
+                    className="h-12 text-base"
+                    required={field.required}
+                  />
                 )}
               </div>
+            ))}
+          </div>
+        )}
 
-              {/* Localisation sélectionnée */}
-              {formData.locationPath && (
-                <div className="p-3 bg-accent rounded-md">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-primary" />
-                    <span className="font-medium">Localisation sélectionnée:</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">{formData.locationPath}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Localisation */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <MapPin className="h-5 w-5" />
+            Localisation
+          </h2>
 
-          {/* Photos */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Camera className="h-5 w-5" />
-                Photos
-              </CardTitle>
-              <CardDescription>
-                Ajoutez des photos de votre pièce (max 10, 10MB chacune)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Bouton d'ajout */}
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handlePhotoAdd}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="gap-2"
-                >
-                  <Upload className="h-4 w-4" />
-                  Ajouter des photos
-                </Button>
-              </div>
+          <div className="relative">
+            <Input
+              type="text"
+              placeholder="Rechercher une localisation..."
+              onChange={(e) => handleLocationSearch(e.target.value)}
+              className="h-12 text-base"
+            />
 
-              {/* Aperçu des photos */}
-              {photos.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {photos.map((photo, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={URL.createObjectURL(photo)}
-                        alt={`Photo ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-md border"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removePhoto(index)}
-                        className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 rounded-b-md">
-                        {photo.name}
-                      </div>
+            {/* Suggestions */}
+            {showLocationSuggestions && locationSuggestions.length > 0 && (
+              <div className="absolute z-50 w-full mt-2 bg-background border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                {locationSuggestions.map((location) => (
+                  <button
+                    type="button"
+                    key={location.id}
+                    className="w-full px-4 py-3 text-left hover:bg-accent active:bg-accent/80 border-b last:border-b-0"
+                    onClick={() => selectLocation(location)}
+                  >
+                    <div className="font-medium">{location.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {location.path || `ID: ${location.id}`}
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Résultat de soumission */}
-          {submitResult && (
-            <Card className={submitResult.success ? "border-green-500" : "border-destructive"}>
-              <CardContent className="pt-6">
-                <div className={`flex items-center gap-3 ${
-                  submitResult.success ? 'text-green-700' : 'text-destructive'
-                }`}>
-                  {submitResult.success ? (
-                    <Package className="h-5 w-5" />
-                  ) : (
-                    <X className="h-5 w-5" />
-                  )}
-                  <p className="font-medium">{submitResult.message}</p>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Localisation sélectionnée */}
+          {formData.locationPath && (
+            <div className="p-4 bg-accent rounded-lg">
+              <div className="flex items-center gap-2 text-sm font-medium mb-1">
+                <Check className="h-4 w-4 text-primary" />
+                Localisation sélectionnée
+              </div>
+              <p className="text-sm text-muted-foreground">{formData.locationPath}</p>
+            </div>
           )}
+        </div>
 
-          {/* Bouton de soumission */}
-          <div className="flex justify-end">
+        {/* Photos */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Camera className="h-5 w-5" />
+            Photos {photos.length > 0 && `(${photos.length}/10)`}
+          </h2>
+
+          {/* Boutons d'ajout photo */}
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              onChange={handlePhotoAdd}
+              className="hidden"
+            />
             <Button
-              type="submit"
-              disabled={isSubmitting}
-              size="lg"
-              className="gap-2"
+              type="button"
+              variant="outline"
+              onClick={() => cameraInputRef.current?.click()}
+              className="h-16 flex-col gap-1"
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Ajout en cours...
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4" />
-                  Ajouter la pièce
-                </>
-              )}
+              <Camera className="h-6 w-6" />
+              <span className="text-xs">Prendre photo</span>
+            </Button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handlePhotoAdd}
+              className="hidden"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-16 flex-col gap-1"
+            >
+              <Upload className="h-6 w-6" />
+              <span className="text-xs">Galerie</span>
             </Button>
           </div>
-        </form>
+
+          {/* Aperçu des photos */}
+          {photos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {photos.map((photo, index) => (
+                <div key={index} className="relative aspect-square">
+                  <img
+                    src={URL.createObjectURL(photo)}
+                    alt={`Photo ${index + 1}`}
+                    className="w-full h-full object-cover rounded-lg border"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(index)}
+                    className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1.5 shadow-md"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 text-center rounded-b-lg truncate">
+                    {index + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {photos.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              Aucune photo ajoutée
+            </div>
+          )}
+        </div>
+
+        {/* Résultat de soumission */}
+        {submitResult && (
+          <div className={`p-4 rounded-lg border-2 ${
+            submitResult.success
+              ? 'bg-green-50 border-green-500 text-green-700'
+              : 'bg-red-50 border-red-500 text-red-700'
+          }`}>
+            <div className="flex items-center gap-3">
+              {submitResult.success ? (
+                <Check className="h-5 w-5 shrink-0" />
+              ) : (
+                <X className="h-5 w-5 shrink-0" />
+              )}
+              <p className="font-medium text-sm">{submitResult.message}</p>
+            </div>
+          </div>
+        )}
+      </form>
+
+      {/* Bouton de soumission fixe en bas */}
+      <div className="fixed bottom-0 left-0 right-0 bg-background border-t p-4 safe-area-inset-bottom">
+        <Button
+          type="submit"
+          disabled={isSubmitting}
+          size="lg"
+          className="w-full h-14 text-base gap-2"
+          onClick={handleSubmit}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Ajout en cours...
+            </>
+          ) : (
+            <>
+              <Plus className="h-5 w-5" />
+              Ajouter la pièce
+            </>
+          )}
+        </Button>
       </div>
     </div>
   )
