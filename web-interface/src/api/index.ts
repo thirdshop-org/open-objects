@@ -97,6 +97,23 @@ export const api = {
     }
   },
 
+  // Récupération d'une pièce par ID - retourne [null, PartAPIResponse] | [string, null]
+  getPart: async (id: number): Promise<APIResult<PartAPIResponse>> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/part?id=${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        return [null, data];
+      }
+      if (response.status === 404) {
+        return ['Pièce non trouvée', null];
+      }
+      return [`HTTP ${response.status}`, null];
+    } catch (error) {
+      return [error instanceof Error ? error.message : 'Unknown error', null];
+    }
+  },
+
   // Récupération des localisations - retourne [null, LocationAPIResponse[]] | [string, null]
   getLocations: async (params?: LocationSearchParams): Promise<APIResult<LocationAPIResponse[]>> => {
     try {

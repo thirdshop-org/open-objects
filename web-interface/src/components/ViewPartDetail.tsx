@@ -38,59 +38,23 @@ export default function ViewPartDetail() {
       setLoading(true)
       setError(null)
 
-      // Récupérer les données depuis l'endpoint HTML existant
-      const response = await fetch(`http://127.0.0.1:8080/view/${id}`)
-      if (!response.ok) {
-        throw new Error(`Pièce non trouvée (HTTP ${response.status})`)
+      // Utiliser l'API centralisée
+      const [error, partData] = await api.getPart(id)
+
+      if (error) {
+        throw new Error(error)
       }
 
-      const html = await response.text()
-      const parsedPart = parsePartFromHTML(html)
-
-      if (!parsedPart || !parsedPart.id) {
-        throw new Error("Impossible d'analyser les données de la pièce")
+      if (!partData || !partData.id) {
+        throw new Error("Données de pièce invalides")
       }
 
-      setPart(parsedPart)
+      setPart(partData)
     } catch (err) {
       console.error("Erreur chargement pièce:", err)
       setError(err instanceof Error ? err.message : "Erreur inconnue")
     } finally {
       setLoading(false)
-    }
-  }
-
-  // Fonction pour analyser le HTML (solution temporaire)
-  const parsePartFromHTML = (html: string): PartAPIResponse | null => {
-    try {
-      const nameMatch = html.match(/<div class="title">([^<]+).*?\(#(\d+)\)/)
-      const typeMatch = html.match(/Type : ([^<]+)/)
-      const locationMatch = html.match(/📍 ([^<]+)/)
-      const propsMatch = html.match(/<pre>([\s\S]*?)<\/pre>/)
-
-      if (!nameMatch || !typeMatch) {
-        return null
-      }
-
-      let props = {}
-      if (propsMatch) {
-        try {
-          props = JSON.parse(propsMatch[1].trim())
-        } catch (e) {
-          console.warn("Impossible de parser les propriétés JSON:", e)
-        }
-      }
-
-      return {
-        id: parseInt(nameMatch[2]),
-        name: nameMatch[1].trim(),
-        type: typeMatch[1].trim(),
-        location: locationMatch ? locationMatch[1].trim() : undefined,
-        props: props,
-      }
-    } catch (err) {
-      console.error("Erreur parsing HTML:", err)
-      return null
     }
   }
 

@@ -461,6 +461,62 @@ func cmdServe(db *sql.DB, args []string) error {
 		})
 	})
 
+	// Récupération d'une pièce par ID: GET /api/part?id={id}
+	mux.HandleFunc("/api/part", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Extraire l'ID du paramètre query
+		idStr := r.URL.Query().Get("id")
+		if idStr == "" {
+			http.Error(w, "part id required", http.StatusBadRequest)
+			return
+		}
+
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "invalid part id", http.StatusBadRequest)
+			return
+		}
+
+		part, err := GetPartMeta(db, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if !part.Found {
+			http.Error(w, "part not found", http.StatusNotFound)
+			return
+		}
+
+		// Parser les propriétés JSON
+		var props interface{}
+		if part.PropsJSON != "" {
+			if err := json.Unmarshal([]byte(part.PropsJSON), &props); err != nil {
+				log.Printf("Warning: cannot parse props JSON for part %d: %v", id, err)
+				props = map[string]interface{}{}
+			}
+		} else {
+			props = map[string]interface{}{}
+		}
+
+		response := map[string]interface{}{
+			"id":   part.ID,
+			"type": part.Type,
+			"name": part.Name,
+			"props": props,
+		}
+
+		if part.LocationPath != "" {
+			response["location"] = part.LocationPath
+		}
+
+		writeJSON(w, http.StatusOK, response)
+	})
+
 	// Localisations: GET /api/locations?search=...&id=...&path=...
 	mux.HandleFunc("/api/locations", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
